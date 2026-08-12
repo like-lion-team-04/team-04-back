@@ -1,0 +1,72 @@
+HELP.md
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+### VS Code ###
+.vscode/
+
+### Secrets and local environment ###
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+secrets/
+credentials/
+src/main/resources/application-local.properties
+src/main/resources/application-secret.properties
+src/main/resources/application-prod-local.properties
+
+### AWS / cloud credentials ###
+.aws/
+aws-credentials*
+
+### Runtime data and logs ###
+*.log
+logs/
+*.pid
+*.h2.db
+*.mv.db
+*.trace.db
+data/
+uploads/
+
+### OS files ###
+.DS_Store
+Thumbs.db
+desktop.ini

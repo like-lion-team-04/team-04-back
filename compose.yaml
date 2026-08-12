@@ -1,0 +1,9 @@
+services:
+  postgres:
+    image: 'postgres:latest'
+    environment:
+      - 'POSTGRES_DB=${POSTGRES_DB:-firstbite}'
+      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-firstbite-local-only}'
+      - 'POSTGRES_USER=${POSTGRES_USER:-firstbite}'
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
