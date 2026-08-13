@@ -26,6 +26,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -138,6 +140,85 @@ class AuthControllerTest {
     }
 
     @Test
+    void authenticatedUserCanReadOwnAccount() throws Exception {
+        LoginTokens tokens = registerAndLoginTokens("010-1234-5678", "user@example.com");
+
+        mockMvc.perform(get("/api/v1/accounts/me")
+                        .header("Authorization", "Bearer " + tokens.accessToken()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("지훈"))
+                .andExpect(jsonPath("$.data.email").value("user@example.com"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("010-****-5678"))
+                .andExpect(jsonPath("$.data.birthDate").value("2000-01-01"))
+                .andExpect(jsonPath("$.data.marketingAgreed").value(false))
+                .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.data.personalization.enabled").value(false))
+                .andExpect(jsonPath("$.data.personalization.feedbackCount").value(0));
+    }
+
+    @Test
+    void accountMeRequiresAccessToken() throws Exception {
+        mockMvc.perform(get("/api/v1/accounts/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
+    void deletesAccountRevokesAllSessionsAndBlocksExistingAccessToken() throws Exception {
+        LoginTokens firstSession = registerAndLoginTokens("010-1234-5678", "user@example.com");
+        var secondLogin = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", "user@example.com", "password", "Example!234"))))
+                .andExpect(status().isOk()).andReturn();
+        String secondAccessToken = objectMapper.readTree(secondLogin.getResponse().getContentAsString())
+                .get("data").get("accessToken").asText();
+
+        var deleteResult = mockMvc.perform(delete("/api/v1/accounts/me")
+                        .header("Authorization", "Bearer " + secondAccessToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "password", "Example!234", "confirmText", "탈퇴"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deletedAt").isNotEmpty())
+                .andReturn();
+
+        assertThat(deleteResult.getResponse().getCookie("refreshToken").getMaxAge()).isZero();
+        assertThat(memberRepository.findAll().get(0).getStatus().name()).isEqualTo("DELETED");
+        assertThat(memberRepository.findAll().get(0).getDeletedAt()).isNotNull();
+        assertThat(refreshTokenRepository.findAll()).allMatch(token -> token.getRevokedAt() != null);
+
+        mockMvc.perform(get("/api/v1/accounts/me")
+                        .header("Authorization", "Bearer " + firstSession.accessToken()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
+    void rejectsDeleteWhenConfirmationTextDoesNotMatch() throws Exception {
+        LoginTokens tokens = registerAndLoginTokens("010-1234-5678", "user@example.com");
+        mockMvc.perform(delete("/api/v1/accounts/me")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "password", "Example!234", "confirmText", "삭제"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("ACCOUNT_CONFIRMATION_INVALID"));
+    }
+
+    @Test
+    void rejectsDeleteWhenPasswordIsWrong() throws Exception {
+        LoginTokens tokens = registerAndLoginTokens("010-1234-5678", "user@example.com");
+        mockMvc.perform(delete("/api/v1/accounts/me")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "password", "Wrong!234", "confirmText", "탈퇴"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_UNAUTHORIZED"));
+    }
+
+    @Test
     void verifiesPhoneAndSignsUpAccordingToContract() throws Exception {
         String token = verifyPhone("010-1234-5678");
         Map<String, Object> request = validRequest(token, "  USER@Example.COM  ");
@@ -205,6 +286,10 @@ class AuthControllerTest {
     }
 
     private jakarta.servlet.http.Cookie registerAndLogin(String phoneNumber, String email) throws Exception {
+        return registerAndLoginTokens(phoneNumber, email).refreshCookie();
+    }
+
+    private LoginTokens registerAndLoginTokens(String phoneNumber, String email) throws Exception {
         String verificationToken = verifyPhone(phoneNumber);
         signUp(validRequest(verificationToken, email));
         var result = mockMvc.perform(post("/api/v1/auth/login")
@@ -213,8 +298,12 @@ class AuthControllerTest {
                                 "email", email, "password", "Example!234"))))
                 .andExpect(status().isOk())
                 .andReturn();
-        return result.getResponse().getCookie("refreshToken");
+        String accessToken = objectMapper.readTree(result.getResponse().getContentAsString())
+                .get("data").get("accessToken").asText();
+        return new LoginTokens(accessToken, result.getResponse().getCookie("refreshToken"));
     }
+
+    private record LoginTokens(String accessToken, jakarta.servlet.http.Cookie refreshCookie) {}
 
     private void signUp(Map<String, Object> request) throws Exception {
         mockMvc.perform(post("/api/v1/auth/signup")

@@ -28,6 +28,7 @@ public class Member {
     private Instant marketingAgreedAt;
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private MemberStatus status;
     @Column(nullable = false, updatable = false) private Instant createdAt;
+    private Instant deletedAt;
 
     private Member(String email, String passwordHash, String name, LocalDate birthDate,
                    String phoneEncrypted, String phoneHash, boolean marketingAgreed) {
@@ -46,5 +47,10 @@ public class Member {
     public static Member create(String email, String passwordHash, String name, LocalDate birthDate,
                                 String phoneEncrypted, String phoneHash, boolean marketingAgreed) {
         return new Member(email, passwordHash, name, birthDate, phoneEncrypted, phoneHash, marketingAgreed);
+    }
+
+    public void delete(Instant now) {
+        this.status = MemberStatus.DELETED;
+        this.deletedAt = now;
     }
 }
