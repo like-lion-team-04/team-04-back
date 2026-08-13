@@ -1,7 +1,7 @@
 package com.likelion.firstbite.firstbiteserver.auth;
 
 import com.likelion.firstbite.firstbiteserver.auth.phone.PhoneVerificationRepository;
-import com.likelion.firstbite.firstbiteserver.auth.sms.SmsSender;
+import com.likelion.firstbite.firstbiteserver.auth.octomo.OctomoClient;
 import com.likelion.firstbite.firstbiteserver.auth.token.RefreshTokenRepository;
 import com.likelion.firstbite.firstbiteserver.auth.login.LoginAttemptRepository;
 import com.likelion.firstbite.firstbiteserver.member.repository.MemberRepository;
@@ -22,7 +22,6 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -41,7 +40,7 @@ class AuthControllerTest {
     @Autowired PhoneVerificationRepository phoneVerificationRepository;
     @Autowired RefreshTokenRepository refreshTokenRepository;
     @Autowired LoginAttemptRepository loginAttemptRepository;
-    @Autowired CapturingSmsSender smsSender;
+    @Autowired StubOctomoClient octomoClient;
 
     @BeforeEach
     void cleanUp() {
@@ -50,7 +49,7 @@ class AuthControllerTest {
         termsAgreementRepository.deleteAll();
         memberRepository.deleteAll();
         phoneVerificationRepository.deleteAll();
-        smsSender.code.set(null);
+        octomoClient.exists = true;
     }
 
     @Test
@@ -272,14 +271,19 @@ class AuthControllerTest {
     }
 
     private String verifyPhone(String phoneNumber) throws Exception {
-        mockMvc.perform(post("/api/v1/auth/phone-verifications")
+        String createResponse = mockMvc.perform(post("/api/v1/auth/phone-verifications")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("phoneNumber", phoneNumber))))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.recipientNumber").value("16663538"))
+                .andExpect(jsonPath("$.data.messageText").value(org.hamcrest.Matchers.startsWith("FIRSTBITE ")))
+                .andReturn().getResponse().getContentAsString();
+        String requestId = objectMapper.readTree(createResponse).get("data").get("requestId").asText();
         String response = mockMvc.perform(post("/api/v1/auth/phone-verifications/confirm")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(Map.of("phoneNumber", phoneNumber, "code", smsSender.code.get()))))
+                        .content(objectMapper.writeValueAsString(Map.of("requestId", requestId))))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("VERIFIED"))
                 .andReturn().getResponse().getContentAsString();
         JsonNode json = objectMapper.readTree(response);
         return json.get("data").get("verificationToken").asText();
@@ -327,11 +331,13 @@ class AuthControllerTest {
 
     @TestConfiguration
     static class SmsTestConfig {
-        @Bean @Primary CapturingSmsSender capturingSmsSender() { return new CapturingSmsSender(); }
+        @Bean @Primary StubOctomoClient stubOctomoClient() { return new StubOctomoClient(); }
     }
 
-    static class CapturingSmsSender implements SmsSender {
-        final AtomicReference<String> code = new AtomicReference<>();
-        @Override public void sendVerificationCode(String phoneNumber, String code) { this.code.set(code); }
+    static class StubOctomoClient implements OctomoClient {
+        boolean exists = true;
+        @Override public boolean messageExists(String phoneNumber, String messageText, int withinMinutes) {
+            return exists;
+        }
     }
 }
