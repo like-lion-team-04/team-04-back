@@ -2,6 +2,8 @@ package com.likelion.firstbite.firstbiteserver.auth;
 
 import com.likelion.firstbite.firstbiteserver.auth.phone.PhoneVerificationRepository;
 import com.likelion.firstbite.firstbiteserver.auth.sms.SmsSender;
+import com.likelion.firstbite.firstbiteserver.auth.token.RefreshTokenRepository;
+import com.likelion.firstbite.firstbiteserver.auth.login.LoginAttemptRepository;
 import com.likelion.firstbite.firstbiteserver.member.repository.MemberRepository;
 import com.likelion.firstbite.firstbiteserver.member.repository.TermsAgreementRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,7 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.security.refresh-cookie-secure=true")
 @AutoConfigureMockMvc
 class AuthControllerTest {
     @Autowired MockMvc mockMvc;
@@ -35,14 +37,64 @@ class AuthControllerTest {
     @Autowired MemberRepository memberRepository;
     @Autowired TermsAgreementRepository termsAgreementRepository;
     @Autowired PhoneVerificationRepository phoneVerificationRepository;
+    @Autowired RefreshTokenRepository refreshTokenRepository;
+    @Autowired LoginAttemptRepository loginAttemptRepository;
     @Autowired CapturingSmsSender smsSender;
 
     @BeforeEach
     void cleanUp() {
+        refreshTokenRepository.deleteAll();
+        loginAttemptRepository.deleteAll();
         termsAgreementRepository.deleteAll();
         memberRepository.deleteAll();
         phoneVerificationRepository.deleteAll();
         smsSender.code.set(null);
+    }
+
+    @Test
+    void logsInWithAccessTokenAndHttpOnlyRefreshCookieThenLogsOut() throws Exception {
+        String verificationToken = verifyPhone("010-1234-5678");
+        signUp(validRequest(verificationToken, "user@example.com"));
+
+        var loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", " USER@Example.COM ", "password", "Example!234"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("지훈"))
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.expiresIn").value(3600))
+                .andReturn();
+
+        String body = loginResult.getResponse().getContentAsString();
+        String accessToken = objectMapper.readTree(body).get("data").get("accessToken").asText();
+        jakarta.servlet.http.Cookie refreshCookie = loginResult.getResponse().getCookie("refreshToken");
+        assertThat(refreshCookie).isNotNull();
+        assertThat(refreshCookie.isHttpOnly()).isTrue();
+        assertThat(refreshCookie.getSecure()).isTrue();
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .header("Authorization", "Bearer " + accessToken)
+                        .cookie(refreshCookie))
+                .andExpect(status().isNoContent());
+        assertThat(refreshTokenRepository.findAll().get(0).getRevokedAt()).isNotNull();
+    }
+
+    @Test
+    void returnsSameCredentialErrorForUnknownEmailAndWrongPassword() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", "unknown@example.com", "password", "Wrong!234"))))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_INVALID_CREDENTIALS"));
+    }
+
+    @Test
+    void logoutRequiresValidAccessToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_UNAUTHORIZED"));
     }
 
     @Test
