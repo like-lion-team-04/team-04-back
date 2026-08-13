@@ -1,3 +1,7 @@
 package com.likelion.firstbite.firstbiteserver.auth.dto;
 
-public record PhoneVerificationSendResponse(int expiresIn, int resendAfter) {}
+import java.util.UUID;
+
+public record PhoneVerificationSendResponse(
+        UUID requestId, String recipientNumber, String messageText, String smsUri, int expiresIn
+) {}

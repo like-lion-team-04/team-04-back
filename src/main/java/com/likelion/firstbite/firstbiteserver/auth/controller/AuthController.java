@@ -70,9 +70,11 @@ public class AuthController {
     }
 
     @PostMapping("/phone-verifications/confirm")
-    public ApiResponse<PhoneVerificationConfirmResponse> confirmVerification(
+    public ResponseEntity<ApiResponse<PhoneVerificationConfirmResponse>> confirmVerification(
             @Valid @RequestBody PhoneVerificationConfirmRequest request) {
-        return ApiResponse.success(phoneVerificationService.confirm(request));
+        PhoneVerificationConfirmResponse response = phoneVerificationService.confirm(request);
+        HttpStatus status = "PENDING".equals(response.status()) ? HttpStatus.ACCEPTED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(ApiResponse.success(response));
     }
 
     @PostMapping("/signup")
