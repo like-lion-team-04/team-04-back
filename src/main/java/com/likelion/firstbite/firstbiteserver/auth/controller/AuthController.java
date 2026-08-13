@@ -11,6 +11,7 @@ import com.likelion.firstbite.firstbiteserver.auth.service.PhoneVerificationServ
 import com.likelion.firstbite.firstbiteserver.auth.service.AuthSessionService;
 import com.likelion.firstbite.firstbiteserver.auth.dto.LoginRequest;
 import com.likelion.firstbite.firstbiteserver.auth.dto.LoginResponse;
+import com.likelion.firstbite.firstbiteserver.auth.dto.TokenResponse;
 import com.likelion.firstbite.firstbiteserver.auth.token.RefreshCookieService;
 import com.likelion.firstbite.firstbiteserver.common.api.ApiResponse;
 import jakarta.validation.Valid;
@@ -50,6 +51,15 @@ public class AuthController {
             @CookieValue(name = RefreshCookieService.COOKIE_NAME, required = false) String refreshToken) {
         authSessionService.logout(memberId, refreshToken);
         return ResponseEntity.noContent().header(HttpHeaders.SET_COOKIE, refreshCookieService.delete().toString()).build();
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<TokenResponse>> refresh(
+            @CookieValue(name = RefreshCookieService.COOKIE_NAME, required = false) String refreshToken) {
+        AuthSessionService.RefreshResult result = authSessionService.refresh(refreshToken);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, refreshCookieService.create(result.refreshToken()).toString())
+                .body(ApiResponse.success(result.response()));
     }
 
     @PostMapping("/phone-verifications")
