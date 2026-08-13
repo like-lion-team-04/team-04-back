@@ -98,6 +98,46 @@ class AuthControllerTest {
     }
 
     @Test
+    void rotatesRefreshTokenAndIssuesNewAccessToken() throws Exception {
+        jakarta.servlet.http.Cookie originalCookie = registerAndLogin("010-1234-5678", "user@example.com");
+
+        var refreshResult = mockMvc.perform(post("/api/v1/auth/refresh").cookie(originalCookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.expiresIn").value(3600))
+                .andReturn();
+
+        jakarta.servlet.http.Cookie rotatedCookie = refreshResult.getResponse().getCookie("refreshToken");
+        assertThat(rotatedCookie).isNotNull();
+        assertThat(rotatedCookie.getValue()).isNotEqualTo(originalCookie.getValue());
+        assertThat(rotatedCookie.isHttpOnly()).isTrue();
+        assertThat(refreshTokenRepository.findAll()).hasSize(2);
+        assertThat(refreshTokenRepository.findAll().stream().filter(token -> token.getRevokedAt() == null)).hasSize(1);
+    }
+
+    @Test
+    void detectsReusedRefreshTokenAndRevokesActiveSession() throws Exception {
+        jakarta.servlet.http.Cookie originalCookie = registerAndLogin("010-1234-5678", "user@example.com");
+        mockMvc.perform(post("/api/v1/auth/refresh").cookie(originalCookie))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/auth/refresh").cookie(originalCookie))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("AUTH_REFRESH_REUSED"));
+
+        assertThat(refreshTokenRepository.findAll())
+                .allMatch(token -> token.getRevokedAt() != null);
+    }
+
+    @Test
+    void rejectsRefreshWithoutCookie() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_REFRESH_INVALID"));
+    }
+
+    @Test
     void verifiesPhoneAndSignsUpAccordingToContract() throws Exception {
         String token = verifyPhone("010-1234-5678");
         Map<String, Object> request = validRequest(token, "  USER@Example.COM  ");
@@ -162,6 +202,18 @@ class AuthControllerTest {
                 .andReturn().getResponse().getContentAsString();
         JsonNode json = objectMapper.readTree(response);
         return json.get("data").get("verificationToken").asText();
+    }
+
+    private jakarta.servlet.http.Cookie registerAndLogin(String phoneNumber, String email) throws Exception {
+        String verificationToken = verifyPhone(phoneNumber);
+        signUp(validRequest(verificationToken, email));
+        var result = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "email", email, "password", "Example!234"))))
+                .andExpect(status().isOk())
+                .andReturn();
+        return result.getResponse().getCookie("refreshToken");
     }
 
     private void signUp(Map<String, Object> request) throws Exception {

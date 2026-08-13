@@ -18,7 +18,8 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/phone-verifications/**").permitAll()
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login", "/api/v1/auth/refresh",
+                                "/api/v1/auth/phone-verifications/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(e -> e.authenticationEntryPoint((request,response,exception) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
