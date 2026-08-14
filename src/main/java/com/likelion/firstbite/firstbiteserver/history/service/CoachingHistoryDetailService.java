@@ -6,6 +6,7 @@ import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingRecord
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingStageRecordRepository;
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
 import com.likelion.firstbite.firstbiteserver.history.dto.CoachingHistoryDetailResponse;
+import com.likelion.firstbite.firstbiteserver.feedback.repository.CoachingFeedbackRepository;
 import com.likelion.firstbite.firstbiteserver.meal.repository.MealRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,7 @@ public class CoachingHistoryDetailService {
     private final CoachingStageRecordRepository stageRecordRepository;
     private final MealRepository mealRepository;
     private final MealAnalysisRepository analysisRepository;
+    private final CoachingFeedbackRepository feedbackRepository;
 
     @Transactional(readOnly = true)
     public CoachingHistoryDetailResponse getDetail(UUID memberId, UUID recordId) {
@@ -41,6 +43,9 @@ public class CoachingHistoryDetailService {
                         stage.getResult().name(), stage.getActualSeconds())).toList();
         boolean personalized = analysisRepository.findFirstByMealIdOrderByCreatedAtDesc(record.getMealId())
                 .map(analysis -> analysis.getPersonalCoefficient().compareTo(BigDecimal.ONE) != 0).orElse(false);
-        return new CoachingHistoryDetailResponse(record.getId(), record.getCompletedAt(), items, stages, null, personalized);
+        var feedback = feedbackRepository.findByRecordId(recordId)
+                .map(value -> new CoachingHistoryDetailResponse.Feedback(
+                        value.isSkipped() ? null : value.getSleepinessScore())).orElse(null);
+        return new CoachingHistoryDetailResponse(record.getId(), record.getCompletedAt(), items, stages, feedback, personalized);
     }
 }

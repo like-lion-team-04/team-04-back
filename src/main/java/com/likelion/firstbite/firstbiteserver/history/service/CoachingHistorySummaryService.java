@@ -4,6 +4,8 @@ import com.likelion.firstbite.firstbiteserver.coaching.domain.CompletionReason;
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingRecordRepository;
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
 import com.likelion.firstbite.firstbiteserver.history.dto.CoachingHistorySummaryResponse;
+import com.likelion.firstbite.firstbiteserver.feedback.domain.CoachingFeedback;
+import com.likelion.firstbite.firstbiteserver.feedback.repository.CoachingFeedbackRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CoachingHistorySummaryService {
     private final CoachingRecordRepository recordRepository;
+    private final CoachingFeedbackRepository feedbackRepository;
 
     @Transactional(readOnly = true)
     public CoachingHistorySummaryResponse summarize(UUID memberId, LocalDate from, LocalDate to, String timezone) {
@@ -35,6 +38,13 @@ public class CoachingHistorySummaryService {
         long completed = records.stream().filter(r -> r.getReason() == CompletionReason.COMPLETED).count();
         long totalStages = records.stream().mapToLong(r -> r.getTotalStages()).sum();
         long completedStages = records.stream().mapToLong(r -> r.getCompletedStages()).sum();
+        var feedbackByRecord = feedbackRepository.findAllByRecordIdIn(records.stream().map(r -> r.getId()).toList())
+                .stream().collect(java.util.stream.Collectors.toMap(CoachingFeedback::getRecordId, value -> value));
+        BigDecimal averageScore = feedbackByRecord.values().stream().filter(value -> !value.isSkipped())
+                .map(CoachingFeedback::getSleepinessScore).map(BigDecimal::valueOf)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long scoreCount = feedbackByRecord.values().stream().filter(value -> !value.isSkipped()).count();
+        averageScore = scoreCount == 0 ? null : averageScore.divide(BigDecimal.valueOf(scoreCount), 2, RoundingMode.HALF_UP);
         BigDecimal completionRate = rate(completed, count);
         BigDecimal adherenceRate = rate(completedStages, totalStages);
 
@@ -44,10 +54,20 @@ public class CoachingHistorySummaryService {
             LocalDate date = record.getCompletedAt().atZone(zone).toLocalDate();
             if (record.getReason() == CompletionReason.COMPLETED) dailyMap.put(date, true);
         });
-        var daily = dailyMap.entrySet().stream()
-                .map(e -> new CoachingHistorySummaryResponse.Daily(e.getKey(), e.getValue(), null)).toList();
+        var scoreByDate = new java.util.HashMap<LocalDate, java.util.List<Integer>>();
+        records.forEach(record -> {
+            CoachingFeedback feedback = feedbackByRecord.get(record.getId());
+            if (feedback != null && !feedback.isSkipped()) scoreByDate.computeIfAbsent(
+                    record.getCompletedAt().atZone(zone).toLocalDate(), ignored -> new java.util.ArrayList<>())
+                    .add(feedback.getSleepinessScore());
+        });
+        var daily = dailyMap.entrySet().stream().map(e -> {
+            var scores = scoreByDate.get(e.getKey());
+            Integer score = scores == null ? null : (int) Math.round(scores.stream().mapToInt(Integer::intValue).average().orElse(0));
+            return new CoachingHistorySummaryResponse.Daily(e.getKey(), e.getValue(), score);
+        }).toList();
         return new CoachingHistorySummaryResponse(new CoachingHistorySummaryResponse.Period(from, to), count,
-                completionRate, adherenceRate, null, daily);
+                completionRate, adherenceRate, averageScore, daily);
     }
 
     private ZoneId resolveZone(String timezone) {

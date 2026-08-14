@@ -9,6 +9,7 @@ import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException
 import com.likelion.firstbite.firstbiteserver.meal.domain.Meal;
 import com.likelion.firstbite.firstbiteserver.meal.domain.MealItem;
 import com.likelion.firstbite.firstbiteserver.meal.repository.MealRepository;
+import com.likelion.firstbite.firstbiteserver.feedback.repository.PersonalizationProfileRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class MealAnalysisService {
     private static final BigDecimal NEUTRAL_PERSONAL_COEFFICIENT = new BigDecimal("1.0000");
     private final MealRepository mealRepository;
     private final MealAnalysisRepository analysisRepository;
+    private final PersonalizationProfileRepository personalizationProfileRepository;
 
     @Transactional
     public AnalysisResponse analyze(UUID memberId, UUID mealId, UUID idempotencyKey,
@@ -61,7 +63,7 @@ public class MealAnalysisService {
         if (meal.getItems().isEmpty()) {
             throw new BusinessException(HttpStatus.BAD_REQUEST, "MEAL_EMPTY", "분석할 메뉴가 없습니다.");
         }
-        MealAnalysis analysis = calculateAndSave(meal, memberId, idempotencyKey, requestHash);
+        MealAnalysis analysis = calculateAndSave(meal, memberId, idempotencyKey, requestHash, usePersonalization);
         meal.markAnalyzed();
         return AnalysisResponse.from(analysis);
     }
@@ -73,23 +75,29 @@ public class MealAnalysisService {
         }
         UUID recalculationKey = UUID.randomUUID();
         MealAnalysis analysis = calculateAndSave(meal, memberId, recalculationKey,
-                hash(meal.getId() + ":side-menu:" + recalculationKey));
+                hash(meal.getId() + ":side-menu:" + recalculationKey), true);
         meal.markAnalyzed();
         return AnalysisResponse.from(analysis);
     }
 
-    private MealAnalysis calculateAndSave(Meal meal, UUID memberId, UUID idempotencyKey, String requestHash) {
+    private MealAnalysis calculateAndSave(Meal meal, UUID memberId, UUID idempotencyKey, String requestHash,
+                                          boolean usePersonalization) {
         validateNutrition(meal);
         BigDecimal baselineGl = meal.getItems().stream().map(this::calculateItemGl)
                 .reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal reliefRate = calculateReliefRate(meal);
+        BigDecimal personalCoefficient = usePersonalization
+                ? personalizationProfileRepository.findById(memberId).map(profile -> profile.getCoefficient() == null
+                    ? NEUTRAL_PERSONAL_COEFFICIENT : profile.getCoefficient()).orElse(NEUTRAL_PERSONAL_COEFFICIENT)
+                : NEUTRAL_PERSONAL_COEFFICIENT;
+        BigDecimal reliefRate = calculateReliefRate(meal).multiply(personalCoefficient)
+                .min(MAX_RELIEF_RATE).setScale(4, RoundingMode.HALF_UP);
         BigDecimal recommendedGl = baselineGl.multiply(BigDecimal.ONE.subtract(reliefRate))
                 .setScale(2, RoundingMode.HALF_UP);
         long estimatedCount = meal.getItems().stream().filter(MealItem::isEstimated).count();
         BigDecimal estimatedRatio = BigDecimal.valueOf(estimatedCount)
                 .divide(BigDecimal.valueOf(meal.getItems().size()), 4, RoundingMode.HALF_UP);
         return analysisRepository.save(MealAnalysis.create(meal.getId(), memberId, idempotencyKey,
-                requestHash, baselineGl, recommendedGl, reliefRate, NEUTRAL_PERSONAL_COEFFICIENT, estimatedRatio));
+                requestHash, baselineGl, recommendedGl, reliefRate, personalCoefficient, estimatedRatio));
     }
 
     private BigDecimal calculateReliefRate(Meal meal) {
