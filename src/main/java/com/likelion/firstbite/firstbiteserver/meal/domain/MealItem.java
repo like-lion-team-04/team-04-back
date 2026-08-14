@@ -1,6 +1,7 @@
 package com.likelion.firstbite.firstbiteserver.meal.domain;
 
 import com.likelion.firstbite.firstbiteserver.food.domain.Food;
+import com.likelion.firstbite.firstbiteserver.sidemenu.domain.SideMenu;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -18,6 +19,7 @@ public class MealItem {
     @Id private UUID id;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "meal_id", nullable = false) private Meal meal;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "food_id", nullable = false) private Food food;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "side_menu_id") private SideMenu sideMenu;
     @Column(name = "food_name", nullable = false, length = 100) private String foodName;
     @Column(name = "serving_multiplier", nullable = false, precision = 3, scale = 1) private BigDecimal servingMultiplier;
     @Column(nullable = false) private boolean estimated;
@@ -32,6 +34,12 @@ public class MealItem {
         item.estimated = food.getNutritionDataQuality() != com.likelion.firstbite.firstbiteserver.food.domain.DataQuality.MEASURED
                 || food.getGiDataQuality() != com.likelion.firstbite.firstbiteserver.food.domain.DataQuality.MEASURED;
         item.createdAt = Instant.now();
+        return item;
+    }
+
+    public static MealItem fromSideMenu(SideMenu sideMenu, BigDecimal servingMultiplier) {
+        MealItem item = from(sideMenu.getFood(), servingMultiplier);
+        item.sideMenu = sideMenu;
         return item;
     }
 

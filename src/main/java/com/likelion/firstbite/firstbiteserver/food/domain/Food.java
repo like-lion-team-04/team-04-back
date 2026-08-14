@@ -70,4 +70,17 @@ public class Food {
         food.updatedAt = food.createdAt;
         return food;
     }
+
+    public void updateNutrition(BigDecimal carbG, BigDecimal fiberG, BigDecimal proteinG,
+                                BigDecimal fatG, BigDecimal calorieKcal) {
+        this.carbG = carbG;
+        this.fiberG = fiberG;
+        this.proteinG = proteinG;
+        this.fatG = fatG;
+        this.availableCarbG = carbG.subtract(fiberG).max(BigDecimal.ZERO);
+        this.gl = this.gi.multiply(this.availableCarbG)
+                .divide(new BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
+        this.calorieKcal = calorieKcal;
+        this.updatedAt = Instant.now();
+    }
 }
