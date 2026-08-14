@@ -23,6 +23,7 @@ public class CoachingRecord {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private CompletionReason reason;
     @Column(name = "completed_stages", nullable = false) private int completedStages;
     @Column(name = "skipped_stages", nullable = false) private int skippedStages;
+    @Column(name = "total_stages", nullable = false) private int totalStages;
     @Column(name = "total_seconds", nullable = false) private long totalSeconds;
     @Column(name = "client_ended_at", nullable = false) private Instant clientEndedAt;
     @Column(name = "completed_at", nullable = false) private Instant completedAt;
@@ -42,6 +43,7 @@ public class CoachingRecord {
         record.reason = reason;
         record.completedStages = completedStages;
         record.skippedStages = skippedStages;
+        record.totalStages = session.getTotalStages();
         record.totalSeconds = totalSeconds;
         record.clientEndedAt = clientEndedAt;
         record.completedAt = completedAt;
