@@ -22,6 +22,7 @@ public class Meal {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private MealStatus status;
     @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;
     @Column(name = "updated_at", nullable = false) private Instant updatedAt;
+    @Column(name = "coaching_plan_version", nullable = false) private int coachingPlanVersion;
     @OneToMany(mappedBy = "meal", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt asc")
     private List<MealItem> items = new ArrayList<>();
@@ -35,6 +36,7 @@ public class Meal {
         meal.status = MealStatus.DRAFT;
         meal.createdAt = Instant.now();
         meal.updatedAt = meal.createdAt;
+        meal.coachingPlanVersion = 1;
         return meal;
     }
 
@@ -55,5 +57,25 @@ public class Meal {
     public void markAnalyzed() {
         status = MealStatus.ANALYZED;
         updatedAt = Instant.now();
+    }
+
+    public void addSideMenu(MealItem item) {
+        addItem(item);
+        coachingPlanVersion++;
+        updatedAt = Instant.now();
+    }
+
+    public boolean isSideMenuEditable() {
+        return status == MealStatus.DRAFT || status == MealStatus.ANALYZED;
+    }
+
+    public boolean removeSideMenu(UUID sideMenuId) {
+        boolean removed = items.removeIf(item -> item.getSideMenu() != null
+                && item.getSideMenu().getId().equals(sideMenuId));
+        if (removed) {
+            coachingPlanVersion++;
+            updatedAt = Instant.now();
+        }
+        return removed;
     }
 }
