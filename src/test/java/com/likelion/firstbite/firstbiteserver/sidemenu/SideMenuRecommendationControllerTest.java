@@ -58,6 +58,42 @@ class SideMenuRecommendationControllerTest {
     }
 
     @Test
+    void listsSideMenusAndFiltersByNutrientFocus() throws Exception {
+        SideMenu egg = side("list-egg", "Egg", NutrientFocus.PROTEIN, 1, 0, 6, 800);
+        side("list-cabbage", "Cabbage", NutrientFocus.FIBER, 5, 3, 1, 700);
+
+        mockMvc.perform(get("/api/v1/side-menus")
+                        .header("Authorization", "Bearer " + token)
+                        .param("nutrientFocus", "PROTEIN"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].sideMenuId").value(egg.getId().toString()))
+                .andExpect(jsonPath("$.data.items[0].name").value("Egg"))
+                .andExpect(jsonPath("$.data.items[0].nutrientFocus").value("PROTEIN"))
+                .andExpect(jsonPath("$.data.items[0].proteinG").value(6))
+                .andExpect(jsonPath("$.data.items[0].fiberG").value(0))
+                .andExpect(jsonPath("$.data.items[0].carbohydrateG").value(1))
+                .andExpect(jsonPath("$.data.items[0].fatG").value(0))
+                .andExpect(jsonPath("$.data.items[0].estimatedPrice").value(800))
+                .andExpect(jsonPath("$.data.items[0].active").value(true));
+    }
+
+    @Test
+    void rejectsUnknownSideMenuNutrientFocus() throws Exception {
+        mockMvc.perform(get("/api/v1/side-menus")
+                        .header("Authorization", "Bearer " + token)
+                        .param("nutrientFocus", "CARBOHYDRATE"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SIDE_MENU_FILTER_INVALID"));
+    }
+
+    @Test
+    void requiresAuthenticationForSideMenuList() throws Exception {
+        mockMvc.perform(get("/api/v1/side-menus"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void recommendsUpToLimitByNutrientDeficitAndAmount() throws Exception {
         Meal meal = meal(member.getId(), food("rice", "밥", 70, 60, 1, 2));
         side("egg", "삶은 계란", NutrientFocus.PROTEIN, 1, 0, 6, 800);
