@@ -1,0 +1,44 @@
+spring:
+  profiles:
+    default: local
+
+  application:
+    name: firstbite-server
+
+  docker:
+    compose:
+      enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+app:
+  # OCTOMO MO verification
+  octomo:
+    api-key: ${OCTOMO_API_KEY:}
+    receiver-number: ${OCTOMO_RECEIVER_NUMBER:16663538}
+
+  # Replace these values in every non-local environment.
+  security:
+    phone-encryption-key: ${PHONE_ENCRYPTION_KEY:firstbite-local-encryption-key-change-me}
+    phone-hmac-key: ${PHONE_HMAC_KEY:firstbite-local-hmac-key-change-me}
+    jwt-secret: ${JWT_SECRET:firstbite-local-jwt-secret-change-me-at-least-32-bytes}
+    access-token-seconds: ${ACCESS_TOKEN_SECONDS:3600}
+    refresh-token-seconds: ${REFRESH_TOKEN_SECONDS:1209600}
+    refresh-cookie-secure: ${REFRESH_COOKIE_SECURE:false}
+
+  # Private S3 image storage
+  aws:
+    region: ${AWS_REGION:ap-northeast-2}
+    s3-bucket: ${S3_BUCKET_NAME:}
+
+  # OpenAI food recognition
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    vision-model: ${OPENAI_VISION_MODEL:gpt-4o-mini}

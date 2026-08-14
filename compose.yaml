@@ -1,9 +1,16 @@
 services:
   postgres:
-    image: 'postgres:latest'
+    image: postgres:16-alpine
     environment:
-      - 'POSTGRES_DB=${POSTGRES_DB:-firstbite}'
-      - 'POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-firstbite-local-only}'
-      - 'POSTGRES_USER=${POSTGRES_USER:-firstbite}'
+      POSTGRES_DB: firstbite
+      POSTGRES_USER: firstbite
+      POSTGRES_PASSWORD: firstbite-local-only
     ports:
-      - '${POSTGRES_PORT:-5432}:5432'
+      - "5432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U firstbite -d firstbite"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
