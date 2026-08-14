@@ -1,0 +1,24 @@
+spring:
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    generate-unique-name: true
+
+app:
+  octomo:
+    api-key: ""
+    receiver-number: "16663538"
+  security:
+    phone-encryption-key: firstbite-test-encryption-key
+    phone-hmac-key: firstbite-test-hmac-key
+    jwt-secret: firstbite-test-jwt-secret-change-me-at-least-32-bytes
+    access-token-seconds: 3600
+    refresh-token-seconds: 1209600
+    refresh-cookie-secure: false
+  aws:
+    region: ap-northeast-2
+    s3-bucket: ""
+  openai:
+    api-key: ""
+    vision-model: gpt-4o-mini
