@@ -5,6 +5,8 @@ import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingRecord
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
 import com.likelion.firstbite.firstbiteserver.history.dto.CoachingHistoryListResponse;
 import com.likelion.firstbite.firstbiteserver.history.dto.HistoryPageMeta;
+import com.likelion.firstbite.firstbiteserver.feedback.domain.CoachingFeedback;
+import com.likelion.firstbite.firstbiteserver.feedback.repository.CoachingFeedbackRepository;
 import com.likelion.firstbite.firstbiteserver.meal.domain.Meal;
 import com.likelion.firstbite.firstbiteserver.meal.repository.MealRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +29,7 @@ public class CoachingHistoryService {
     static final ZoneId SERVICE_ZONE = ZoneId.of("Asia/Seoul");
     private final CoachingRecordRepository recordRepository;
     private final MealRepository mealRepository;
+    private final CoachingFeedbackRepository feedbackRepository;
 
     @Transactional(readOnly = true)
     public Result getHistory(UUID memberId, LocalDate from, LocalDate to, int page, int size) {
@@ -38,12 +41,17 @@ public class CoachingHistoryService {
         var mealIds = records.getContent().stream().map(CoachingRecord::getMealId).distinct().toList();
         Map<UUID, Meal> meals = mealRepository.findAllByIdIn(mealIds).stream()
                 .collect(Collectors.toMap(Meal::getId, Function.identity()));
+        Map<UUID, CoachingFeedback> feedbacks = feedbackRepository.findAllByRecordIdIn(
+                        records.getContent().stream().map(CoachingRecord::getId).toList()).stream()
+                .collect(Collectors.toMap(CoachingFeedback::getRecordId, Function.identity()));
 
         var items = records.getContent().stream().map(record -> {
             Meal meal = meals.get(record.getMealId());
             String mealName = meal == null ? "삭제된 식사" : summarizeMeal(meal);
+            CoachingFeedback feedback = feedbacks.get(record.getId());
+            Integer score = feedback == null || feedback.isSkipped() ? null : feedback.getSleepinessScore();
             return new CoachingHistoryListResponse.Item(record.getId(), mealName, record.getCompletedAt(),
-                    record.getCompletedStages(), record.getTotalStages(), null);
+                    record.getCompletedStages(), record.getTotalStages(), score);
         }).toList();
         return new Result(new CoachingHistoryListResponse(items),
                 new HistoryPageMeta(page, size, records.getTotalElements(), records.getTotalPages()));
