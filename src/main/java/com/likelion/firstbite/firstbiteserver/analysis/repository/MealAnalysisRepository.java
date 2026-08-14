@@ -12,4 +12,5 @@ public interface MealAnalysisRepository extends JpaRepository<MealAnalysis, UUID
             UUID memberId, UUID idempotencyKey, Instant cutoff);
 
     Optional<MealAnalysis> findFirstByMealIdOrderByCreatedAtDesc(UUID mealId);
+    Optional<MealAnalysis> findByIdAndMemberId(UUID id, UUID memberId);
 }
