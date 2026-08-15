@@ -119,7 +119,7 @@ public class MealAnalysisService {
         MealAnalysis analysis = analysisRepository.findFirstByMealIdOrderByCreatedAtDesc(mealId)
                 .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "ANALYSIS_NOT_FOUND",
                         "부담 분석 결과를 찾을 수 없습니다."));
-        return AnalysisDetailResponse.from(analysis);
+        return AnalysisDetailResponse.from(analysis, meal);
     }
 
     private BigDecimal calculateItemGl(MealItem item) {

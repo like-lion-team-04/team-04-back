@@ -13,9 +13,16 @@ public record CreateMealResponse(UUID mealId, MealStatus status, List<Item> item
         return new CreateMealResponse(meal.getId(), meal.getStatus(), meal.getItems().stream().map(Item::from).toList());
     }
 
-    public record Item(UUID mealItemId, UUID foodId, String name, BigDecimal servingMultiplier, boolean estimated) {
+    public record Item(UUID mealItemId, UUID foodId, String name, BigDecimal servingMultiplier,
+                       BigDecimal carbohydrateG, BigDecimal fiberG, BigDecimal proteinG, BigDecimal fatG,
+                       BigDecimal calorieKcal, BigDecimal gi, boolean estimated) {
         static Item from(MealItem item) {
-            return new Item(item.getId(), item.getFood().getId(), item.getFoodName(), item.getServingMultiplier(), item.isEstimated());
+            var food = item.getFood();
+            var multiplier = item.getServingMultiplier();
+            return new Item(item.getId(), food.getId(), item.getFoodName(), multiplier,
+                    food.getCarbG().multiply(multiplier), food.getFiberG().multiply(multiplier),
+                    food.getProteinG().multiply(multiplier), food.getFatG().multiply(multiplier),
+                    food.getCalorieKcal().multiply(multiplier), food.getGi(), item.isEstimated());
         }
     }
 }
