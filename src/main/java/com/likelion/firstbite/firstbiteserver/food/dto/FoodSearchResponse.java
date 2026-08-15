@@ -9,11 +9,13 @@ import java.util.UUID;
 
 public record FoodSearchResponse(List<Item> items) {
     public record Item(UUID foodId, String name, FoodCategory category, BigDecimal defaultServing,
-                       BigDecimal gi, String dataQuality) {
+                       BigDecimal carbohydrateG, BigDecimal fiberG, BigDecimal proteinG, BigDecimal fatG,
+                       BigDecimal calorieKcal, BigDecimal gi, String dataQuality) {
         public static Item from(Food food) {
             String quality = food.getGiDataQuality().name().equals("MEASURED") ? "MEASURED" : "ESTIMATED";
             return new Item(food.getId(), food.getName(), food.getSearchCategory(), BigDecimal.ONE,
-                    food.getGi(), quality);
+                    food.getCarbG(), food.getFiberG(), food.getProteinG(), food.getFatG(),
+                    food.getCalorieKcal(), food.getGi(), quality);
         }
     }
 }

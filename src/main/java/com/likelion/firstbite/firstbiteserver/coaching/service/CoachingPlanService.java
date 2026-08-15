@@ -100,7 +100,8 @@ public class CoachingPlanService {
 
     private boolean isStapleCarbohydrate(FoodCategory category) {
         return category == FoodCategory.RICE || category == FoodCategory.NOODLE
-                || category == FoodCategory.FLOUR || category == FoodCategory.BREAD;
+                || category == FoodCategory.BUNSIK || category == FoodCategory.RICE_BOWL
+                || category == FoodCategory.BREAD;
     }
 
     private void addIfPresent(List<StageDraft> drafts, String title, List<MealItem> items) {

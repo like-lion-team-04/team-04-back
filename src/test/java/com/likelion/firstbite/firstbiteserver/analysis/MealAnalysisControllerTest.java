@@ -71,7 +71,8 @@ class MealAnalysisControllerTest {
                 .andExpect(jsonPath("$.data.reliefRate").value(0.07))
                 .andExpect(jsonPath("$.data.personalCoefficient").value(1.0))
                 .andExpect(jsonPath("$.data.estimatedItemRatio").value(0.0))
-                .andExpect(jsonPath("$.data.disclaimer").value("개인 혈당 예측이 아닌 상대 비교입니다."));
+                .andExpect(jsonPath("$.data.disclaimer").value(
+                        "설명을 위한 상대적 비교이며 개인 혈당 수치나 실제 혈당 변화를 예측하지 않습니다."));
     }
 
     @Test
@@ -155,6 +156,12 @@ class MealAnalysisControllerTest {
                 .andExpect(jsonPath("$.data.recommended.gl").value(32.09))
                 .andExpect(jsonPath("$.data.recommended.curve[2]").value(0.93))
                 .andExpect(jsonPath("$.data.reliefRate").value(0.07))
+                .andExpect(jsonPath("$.data.baselineLevel").value("HIGH"))
+                .andExpect(jsonPath("$.data.recommendedLevel").value("HIGH"))
+                .andExpect(jsonPath("$.data.baselineChart[1].minute").value(30))
+                .andExpect(jsonPath("$.data.chartUnit").value("RELATIVE"))
+                .andExpect(jsonPath("$.data.itemContributions.length()").value(2))
+                .andExpect(jsonPath("$.data.reductionFactors.length()").value(2))
                 .andExpect(jsonPath("$.data.dataQuality").value("MIXED"))
                 .andExpect(jsonPath("$.data.sources.length()").value(2))
                 .andExpect(jsonPath("$.data.sources[0].evidenceId").value("MFDS_NUTRITION_DB"));

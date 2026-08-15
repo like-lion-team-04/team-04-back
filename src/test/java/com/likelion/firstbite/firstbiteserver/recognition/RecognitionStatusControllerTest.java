@@ -76,10 +76,13 @@ class RecognitionStatusControllerTest {
                 .andExpect(jsonPath("$.data.items[0].temporaryItemId").value("tmp-1"))
                 .andExpect(jsonPath("$.data.items[0].recognizedName").value("떡볶이"))
                 .andExpect(jsonPath("$.data.items[0].confidence").value(0.87))
+                .andExpect(jsonPath("$.data.items[0].confidenceLevel").value("HIGH"))
+                .andExpect(jsonPath("$.data.items[0].needsConfirmation").value(false))
                 .andExpect(jsonPath("$.data.items[0].candidates[0].name").value("떡볶이"))
+                .andExpect(jsonPath("$.data.items[0].candidates[0].gi").value(70))
                 .andExpect(jsonPath("$.data.items[0].estimatedServing").value(1))
                 .andExpect(jsonPath("$.data.items[0].estimated").value(true))
-                .andExpect(jsonPath("$.data.warnings[0]").value("사진만으로 양을 알 수 없어 1인분으로 설정했어요."));
+                .andExpect(jsonPath("$.data.warnings[0]").value("사진만으로 양을 정확히 알 수 없어 1인분으로 설정했어요."));
     }
 
     @Test
@@ -124,7 +127,7 @@ class RecognitionStatusControllerTest {
     }
 
     private Food food(String name, String code, String initials) {
-        return Food.create(UUID.randomUUID(), code, name, "분식", FoodCategory.FLOUR, initials,
+        return Food.create(UUID.randomUUID(), code, name, "분식", FoodCategory.BUNSIK, initials,
                 "1인분", BigDecimal.ONE, ServingUnit.COUNT, new BigDecimal("70"),
                 DataQuality.MEASURED, DataQuality.ESTIMATED);
     }

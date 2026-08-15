@@ -17,7 +17,8 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class RecognitionResultMapper {
-    private static final String SERVING_WARNING = "사진만으로 양을 알 수 없어 1인분으로 설정했어요.";
+    private static final BigDecimal LOW_CONFIDENCE_THRESHOLD = new BigDecimal("0.70");
+    private static final String SERVING_WARNING = "사진만으로 양을 정확히 알 수 없어 1인분으로 설정했어요.";
     private final ObjectMapper objectMapper;
     private final FoodRepository foodRepository;
 
@@ -31,8 +32,12 @@ public class RecognitionResultMapper {
                 String name = node.path("recognizedName").asText("").trim();
                 if (name.isEmpty()) continue;
                 BigDecimal confidence = clamp(node.path("confidence").decimalValue());
+                List<RecognitionStatusResponse.Candidate> candidates = candidates(name, confidence);
+                boolean needsConfirmation = confidence.compareTo(LOW_CONFIDENCE_THRESHOLD) < 0 || candidates.isEmpty();
+                var level = needsConfirmation ? RecognitionStatusResponse.ConfidenceLevel.LOW
+                        : RecognitionStatusResponse.ConfidenceLevel.HIGH;
                 items.add(new RecognitionStatusResponse.Item("tmp-" + index++, name, confidence,
-                        candidates(name, confidence), BigDecimal.ONE, true));
+                        level, needsConfirmation, candidates, BigDecimal.ONE, true));
             }
             List<String> warnings = new ArrayList<>();
             for (JsonNode warning : root.path("warnings")) {
@@ -56,7 +61,10 @@ public class RecognitionResultMapper {
             boolean exact = food.getName().equalsIgnoreCase(name);
             BigDecimal score = exact ? modelConfidence : modelConfidence.min(new BigDecimal("0.75")
                     .subtract(new BigDecimal("0.10").multiply(BigDecimal.valueOf(index))));
-            return new RecognitionStatusResponse.Candidate(food.getId(), food.getName(), clamp(score));
+            String quality = food.getGiDataQuality().name().equals("MEASURED") ? "MEASURED" : "ESTIMATED";
+            return new RecognitionStatusResponse.Candidate(food.getId(), food.getName(), clamp(score),
+                    food.getCarbG(), food.getFiberG(), food.getProteinG(), food.getFatG(),
+                    food.getCalorieKcal(), food.getGi(), quality);
         }).toList();
     }
 

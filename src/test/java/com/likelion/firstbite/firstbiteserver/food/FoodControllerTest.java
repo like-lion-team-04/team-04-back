@@ -42,7 +42,7 @@ class FoodControllerTest {
                 "encrypted-phone", "food-test-phone-hash", false));
         accessToken = jwtTokenService.issue(member.getId());
 
-        foodRepository.save(food("떡볶이", "tteokbokki", "ㄸㅂㅇ", "분식", FoodCategory.FLOUR, "95"));
+        foodRepository.save(food("떡볶이", "tteokbokki", "ㄸㅂㅇ", "분식", FoodCategory.BUNSIK, "95"));
         foodRepository.save(food("백미밥", "white_rice", "ㅂㅁㅂ", "밥류", FoodCategory.RICE, "70"));
     }
 
@@ -51,13 +51,15 @@ class FoodControllerTest {
         mockMvc.perform(get("/api/v1/foods")
                         .header("Authorization", "Bearer " + accessToken)
                         .param("query", "ㄸㅂㅇ")
-                        .param("category", "FLOUR")
+                        .param("category", "BUNSIK")
                         .param("page", "1")
                         .param("size", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.items[0].name").value("떡볶이"))
-                .andExpect(jsonPath("$.data.items[0].category").value("FLOUR"))
+                .andExpect(jsonPath("$.data.items[0].category").value("BUNSIK"))
+                .andExpect(jsonPath("$.data.items[0].carbohydrateG").value(0))
+                .andExpect(jsonPath("$.data.items[0].proteinG").value(0))
                 .andExpect(jsonPath("$.data.items[0].dataQuality").value("ESTIMATED"))
                 .andExpect(jsonPath("$.meta.page").value(1))
                 .andExpect(jsonPath("$.meta.totalElements").value(1));

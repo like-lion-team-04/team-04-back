@@ -15,6 +15,7 @@ public record RecognitionStatusResponse(
         List<String> warnings,
         Error error
 ) {
+    public enum ConfidenceLevel { HIGH, LOW }
     public static RecognitionStatusResponse processing(UUID id) {
         return new RecognitionStatusResponse(id, RecognitionStatus.PROCESSING, null, null, null);
     }
@@ -28,7 +29,11 @@ public record RecognitionStatusResponse(
     }
 
     public record Item(String temporaryItemId, String recognizedName, BigDecimal confidence,
+                       ConfidenceLevel confidenceLevel, boolean needsConfirmation,
                        List<Candidate> candidates, BigDecimal estimatedServing, boolean estimated) {}
-    public record Candidate(UUID foodId, String name, BigDecimal confidence) {}
+    public record Candidate(UUID foodId, String name, BigDecimal confidence,
+                            BigDecimal carbohydrateG, BigDecimal fiberG, BigDecimal proteinG,
+                            BigDecimal fatG, BigDecimal calorieKcal, BigDecimal gi,
+                            String dataQuality) {}
     public record Error(String code, String message) {}
 }
