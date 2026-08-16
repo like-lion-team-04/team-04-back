@@ -42,3 +42,7 @@ app:
   openai:
     api-key: ${OPENAI_API_KEY:}
     vision-model: ${OPENAI_VISION_MODEL:gpt-4o-mini}
+    endpoint: ${OPENAI_ENDPOINT:https://api.openai.com/v1/responses}
+    connect-timeout-seconds: ${OPENAI_CONNECT_TIMEOUT_SECONDS:5}
+    request-timeout-seconds: ${OPENAI_REQUEST_TIMEOUT_SECONDS:40}
+    max-attempts: ${OPENAI_MAX_ATTEMPTS:2}

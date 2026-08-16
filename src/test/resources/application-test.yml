@@ -22,3 +22,7 @@ app:
   openai:
     api-key: ""
     vision-model: gpt-4o-mini
+    endpoint: https://api.openai.com/v1/responses
+    connect-timeout-seconds: 1
+    request-timeout-seconds: 1
+    max-attempts: 1
