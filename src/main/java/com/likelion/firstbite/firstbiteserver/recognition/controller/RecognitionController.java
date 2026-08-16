@@ -20,7 +20,7 @@ public class RecognitionController {
     public ApiResponse<RecognitionAcceptedResponse> create(@AuthenticationPrincipal UUID memberId,
             @RequestHeader("Idempotency-Key") UUID idempotencyKey,
             @RequestPart("image") MultipartFile image,
-            @RequestPart(value = "imageType", required = false) ImageType imageType) {
+            @RequestParam(value = "imageType", defaultValue = "FOOD_PHOTO") ImageType imageType) {
         return ApiResponse.success(service.create(memberId, idempotencyKey, image, imageType));
     }
 
