@@ -21,6 +21,7 @@ public record AnalysisDetailResponse(
         List<ChartPoint> recommendedChart,
         List<ItemContribution> itemContributions,
         List<ReductionFactor> reductionFactors,
+        ComparisonConditions comparisonConditions,
         DataQuality dataQuality,
         List<EvidenceSummary> sources,
         String chartUnit,
@@ -54,6 +55,9 @@ public record AnalysisDetailResponse(
                 chart(recommendedCurve),
                 contributions,
                 reductionFactors(meal, analysis),
+                new ComparisonConditions("PROTEIN_FIRST", 5, 15,
+                        analysis.getPersonalCoefficient().compareTo(BigDecimal.ONE) != 0,
+                        analysis.getPersonalCoefficient()),
                 DataQuality.from(analysis.getEstimatedItemRatio()),
                 List.of(
                         new EvidenceSummary("MFDS_NUTRITION_DB", "식품의약품안전처 식품영양성분 DB"),
@@ -107,6 +111,9 @@ public record AnalysisDetailResponse(
                                    BigDecimal gi, String dataQuality, BigDecimal baselineGl,
                                    BigDecimal recommendedGl) {}
     public record ReductionFactor(String type, String description) {}
+    public record ComparisonConditions(String orderRule, int stageIntervalMinutes,
+                                       int totalRecommendedMinutes, boolean personalizationApplied,
+                                       BigDecimal personalCoefficient) {}
     public record EvidenceSummary(String evidenceId, String title) {}
 
     public enum BurdenLevel {

@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -57,9 +58,9 @@ public class CoachingPlanService {
         }
 
         List<StageDraft> drafts = new ArrayList<>();
-        addIfPresent(drafts, "단백질 음식부터", proteinItems);
-        addIfPresent(drafts, "채소·식이섬유 반찬", fiberItems);
-        addIfPresent(drafts, "밥·면", carbohydrateItems);
+        addIfPresent(drafts, "단백질 음식부터", StageType.PROTEIN, proteinItems);
+        addIfPresent(drafts, "채소·식이섬유 반찬", StageType.FIBER, fiberItems);
+        addIfPresent(drafts, "밥·면", StageType.CARBOHYDRATE, carbohydrateItems);
         if (drafts.isEmpty()) {
             throw new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, "COACHING_PLAN_UNAVAILABLE",
                     "현재 메뉴로 코칭 단계를 구성할 수 없습니다.");
@@ -69,12 +70,21 @@ public class CoachingPlanService {
         for (int index = 0; index < drafts.size(); index++) {
             StageDraft draft = drafts.get(index);
             Integer seconds = index == drafts.size() - 1 ? null : STAGE_INTERVAL_SECONDS;
-            stages.add(new CoachingPlanResponse.Stage(index + 1, draft.title(), draft.itemIds(), seconds));
+            List<CoachingPlanResponse.Item> items = draft.items().stream().map(this::toItem).toList();
+            stages.add(new CoachingPlanResponse.Stage(index + 1, draft.title(),
+                    draft.items().stream().map(MealItem::getId).toList(), seconds,
+                    summary(draft.type(), draft.items()), guide(draft.type()), items));
         }
+        AtomicInteger order = new AtomicInteger(1);
+        List<CoachingPlanResponse.RecommendedOrderItem> recommendedOrder = stages.stream()
+                .flatMap(stage -> stage.items().stream().map(item -> new CoachingPlanResponse.RecommendedOrderItem(
+                        order.getAndIncrement(), stage.stage(), item.mealItemId(), item.foodId(), item.name(),
+                        item.imageUrl(), item.servingMultiplier(), item.gi(), item.giDataQuality())))
+                .toList();
         int version = meal.getCoachingPlanVersion();
         UUID planId = UUID.nameUUIDFromBytes((mealId + ":" + version).getBytes(StandardCharsets.UTF_8));
         return new CoachingPlanResponse(planId, version, CoachingPlanResponse.RuleType.PROTEIN_FIRST,
-                stages, CoachingPlanResponse.GuideTone.NON_RESTRICTIVE);
+                stages, recommendedOrder, CoachingPlanResponse.GuideTone.NON_RESTRICTIVE);
     }
 
     private StageType classify(Food food) {
@@ -104,12 +114,48 @@ public class CoachingPlanService {
                 || category == FoodCategory.BREAD;
     }
 
-    private void addIfPresent(List<StageDraft> drafts, String title, List<MealItem> items) {
+    private void addIfPresent(List<StageDraft> drafts, String title, StageType type, List<MealItem> items) {
         if (!items.isEmpty()) {
-            drafts.add(new StageDraft(title, items.stream().map(MealItem::getId).toList()));
+            drafts.add(new StageDraft(title, type, List.copyOf(items)));
         }
     }
 
+    private CoachingPlanResponse.Item toItem(MealItem item) {
+        Food food = item.getFood();
+        BigDecimal multiplier = item.getServingMultiplier();
+        return new CoachingPlanResponse.Item(item.getId(), food.getId(), item.getFoodName(), food.getImageUrl(),
+                food.getServingDescription(), multiplier, food.getCarbG().multiply(multiplier),
+                food.getFiberG().multiply(multiplier), food.getProteinG().multiply(multiplier),
+                food.getFatG().multiply(multiplier), food.getCalorieKcal().multiply(multiplier),
+                food.getGi(), food.getGiDataQuality().name(), item.isEstimated());
+    }
+
+    private CoachingPlanResponse.StageSummary summary(StageType type, List<MealItem> items) {
+        BigDecimal nutrient = items.stream().map(item -> switch (type) {
+                    case PROTEIN -> item.getFood().getProteinG().multiply(item.getServingMultiplier());
+                    case FIBER -> item.getFood().getFiberG().multiply(item.getServingMultiplier());
+                    case CARBOHYDRATE -> item.getFood().getAvailableCarbG().multiply(item.getServingMultiplier());
+                }).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal calories = items.stream().map(item -> item.getFood().getCalorieKcal()
+                        .multiply(item.getServingMultiplier())).reduce(BigDecimal.ZERO, BigDecimal::add);
+        int price = items.stream().filter(item -> item.getSideMenu() != null)
+                .mapToInt(item -> item.getSideMenu().getEstimatedPrice()).sum();
+        String nutrientName = switch (type) {
+            case PROTEIN -> "PROTEIN";
+            case FIBER -> "FIBER";
+            case CARBOHYDRATE -> "AVAILABLE_CARBOHYDRATE";
+        };
+        return new CoachingPlanResponse.StageSummary(nutrientName, nutrient, calories, price == 0 ? null : price);
+    }
+
+    private String guide(StageType type) {
+        return switch (type) {
+            case PROTEIN -> "단백질 음식부터 천천히 드셔보세요.";
+            case FIBER -> "채소와 식이섬유 반찬을 이어서 드셔보세요.";
+            case CARBOHYDRATE -> "밥·면 음식은 마지막에 편하게 드세요.";
+        };
+    }
+
     private enum StageType { PROTEIN, FIBER, CARBOHYDRATE }
-    private record StageDraft(String title, List<UUID> itemIds) {}
+    private record StageDraft(String title, StageType type, List<MealItem> items) {}
 }

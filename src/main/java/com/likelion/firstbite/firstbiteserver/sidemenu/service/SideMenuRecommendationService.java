@@ -17,6 +17,7 @@ import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.UUID;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
@@ -90,12 +91,25 @@ public class SideMenuRecommendationService {
     }
 
     private SideMenuRecommendationsResponse.Item toResponse(SideMenu side) {
+        var food = side.getFood();
         BigDecimal amount = focusAmount(side).stripTrailingZeros();
         String nutrient = side.getNutrientFocus() == NutrientFocus.PROTEIN ? "단백질" : "식이섬유";
         BigDecimal delta = side.getNutrientFocus().reliefDelta();
-        return new SideMenuRecommendationsResponse.Item(side.getId(), side.getFood().getName(),
+        List<SideMenuRecommendationsResponse.Reason> reasons = List.of(
+                new SideMenuRecommendationsResponse.Reason(nutrient + " 보완",
+                        nutrient + " " + amount.toPlainString() + "g을 추가할 수 있어요."),
+                new SideMenuRecommendationsResponse.Reason("식사 순서 구성에 적합",
+                        "탄수화물 음식보다 먼저 먹는 단계에 배치할 수 있어요."));
+        var nutrition = new SideMenuRecommendationsResponse.Nutrition(food.getServingDescription(),
+                food.getServingAmount(), food.getServingUnit().name(), food.getCarbG(), food.getFiberG(),
+                food.getProteinG(), food.getFatG(), food.getSodiumMg(), food.getCalorieKcal(),
+                food.getGi(), food.getGiDataQuality().name());
+        var effects = new SideMenuRecommendationsResponse.ExpectedEffects(delta, food.getFiberG(),
+                food.getProteinG(), true);
+        return new SideMenuRecommendationsResponse.Item(side.getId(), food.getId(), food.getName(),
                 side.getNutrientFocus(), nutrient + " " + amount.toPlainString() + "g을 보완해요.",
-                delta, side.getEstimatedPrice());
+                delta, side.getEstimatedPrice(), food.getDescription(), food.getImageUrl(),
+                nutrition, reasons, effects);
     }
 
     private BusinessException notNeeded(String message) {

@@ -25,12 +25,15 @@ public class Food {
     @Enumerated(EnumType.STRING) @Column(name = "search_category", nullable = false, length = 20) private FoodCategory searchCategory;
     @Column(nullable = false, length = 50) private String initials;
     @Column(name = "serving_description", nullable = false, length = 150) private String servingDescription;
+    @Column(name = "image_url", length = 500) private String imageUrl;
+    @Column(length = 500) private String description;
     @Column(name = "serving_amount", nullable = false, precision = 10, scale = 2) private BigDecimal servingAmount;
     @Enumerated(EnumType.STRING) @Column(name = "serving_unit", nullable = false, length = 10) private ServingUnit servingUnit;
     @Column(name = "carb_g", nullable = false, precision = 10, scale = 2) private BigDecimal carbG;
     @Column(name = "fiber_g", nullable = false, precision = 10, scale = 2) private BigDecimal fiberG;
     @Column(name = "protein_g", nullable = false, precision = 10, scale = 2) private BigDecimal proteinG;
     @Column(name = "fat_g", nullable = false, precision = 10, scale = 2) private BigDecimal fatG;
+    @Column(name = "sodium_mg", precision = 10, scale = 2) private BigDecimal sodiumMg;
     @Column(name = "available_carb_g", nullable = false, precision = 10, scale = 2) private BigDecimal availableCarbG;
     @Column(nullable = false, precision = 7, scale = 2) private BigDecimal gi;
     @Column(nullable = false, precision = 10, scale = 2) private BigDecimal gl;
@@ -81,6 +84,17 @@ public class Food {
         this.gl = this.gi.multiply(this.availableCarbG)
                 .divide(new BigDecimal("100"), 2, java.math.RoundingMode.HALF_UP);
         this.calorieKcal = calorieKcal;
+        this.updatedAt = Instant.now();
+    }
+
+    public void updatePresentation(String imageUrl, String description) {
+        this.imageUrl = imageUrl;
+        this.description = description;
+        this.updatedAt = Instant.now();
+    }
+
+    public void updateSodium(BigDecimal sodiumMg) {
+        this.sodiumMg = sodiumMg;
         this.updatedAt = Instant.now();
     }
 }
