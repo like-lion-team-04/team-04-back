@@ -162,6 +162,9 @@ class MealAnalysisControllerTest {
                 .andExpect(jsonPath("$.data.chartUnit").value("RELATIVE"))
                 .andExpect(jsonPath("$.data.itemContributions.length()").value(2))
                 .andExpect(jsonPath("$.data.reductionFactors.length()").value(2))
+                .andExpect(jsonPath("$.data.comparisonConditions.orderRule").value("PROTEIN_FIRST"))
+                .andExpect(jsonPath("$.data.comparisonConditions.stageIntervalMinutes").value(5))
+                .andExpect(jsonPath("$.data.comparisonConditions.totalRecommendedMinutes").value(15))
                 .andExpect(jsonPath("$.data.dataQuality").value("MIXED"))
                 .andExpect(jsonPath("$.data.sources.length()").value(2))
                 .andExpect(jsonPath("$.data.sources[0].evidenceId").value("MFDS_NUTRITION_DB"));

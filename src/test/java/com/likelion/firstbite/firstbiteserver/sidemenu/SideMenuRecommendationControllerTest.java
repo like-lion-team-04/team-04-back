@@ -74,8 +74,34 @@ class SideMenuRecommendationControllerTest {
                 .andExpect(jsonPath("$.data.items[0].fiberG").value(0))
                 .andExpect(jsonPath("$.data.items[0].carbohydrateG").value(1))
                 .andExpect(jsonPath("$.data.items[0].fatG").value(0))
+                .andExpect(jsonPath("$.data.items[0].gi").value(20))
+                .andExpect(jsonPath("$.data.items[0].giDataQuality").value("MEASURED"))
+                .andExpect(jsonPath("$.data.items[0].servingDescription").value("1인분"))
                 .andExpect(jsonPath("$.data.items[0].estimatedPrice").value(800))
-                .andExpect(jsonPath("$.data.items[0].active").value(true));
+                .andExpect(jsonPath("$.data.items[0].active").value(true))
+                .andExpect(jsonPath("$.data.meta.totalElements").value(1));
+    }
+
+    @Test
+    void searchesSideMenusByPartialName() throws Exception {
+        side("search-salad", "양배추 샐러드", NutrientFocus.FIBER, 5, 3, 1, 700);
+        side("search-egg", "삶은 계란", NutrientFocus.PROTEIN, 1, 0, 6, 800);
+
+        mockMvc.perform(get("/api/v1/side-menus")
+                        .header("Authorization", "Bearer " + token)
+                        .param("query", "양배추"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("양배추 샐러드"));
+    }
+
+    @Test
+    void rejectsTooLongSideMenuQuery() throws Exception {
+        mockMvc.perform(get("/api/v1/side-menus")
+                        .header("Authorization", "Bearer " + token)
+                        .param("query", "가".repeat(101)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("SIDE_MENU_QUERY_INVALID"));
     }
 
     @Test
@@ -109,6 +135,10 @@ class SideMenuRecommendationControllerTest {
                 .andExpect(jsonPath("$.data.items[0].nutrientFocus").value("PROTEIN"))
                 .andExpect(jsonPath("$.data.items[0].reason").value("단백질 8g을 보완해요."))
                 .andExpect(jsonPath("$.data.items[0].expectedReliefDelta").value(0.04))
+                .andExpect(jsonPath("$.data.items[0].nutrition.proteinG").value(8))
+                .andExpect(jsonPath("$.data.items[0].reasons.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].expectedEffects.proteinDeltaG").value(8))
+                .andExpect(jsonPath("$.data.items[0].expectedEffects.estimated").value(true))
                 .andExpect(jsonPath("$.data.items[0].estimatedPrice").value(1200))
                 .andExpect(jsonPath("$.data.items[1].name").value("삶은 계란"));
     }

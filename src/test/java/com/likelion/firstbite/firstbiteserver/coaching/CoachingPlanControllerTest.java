@@ -72,10 +72,15 @@ class CoachingPlanControllerTest {
                 .andExpect(jsonPath("$.data.stages[0].stage").value(1))
                 .andExpect(jsonPath("$.data.stages[0].title").value("단백질 음식부터"))
                 .andExpect(jsonPath("$.data.stages[0].recommendedSeconds").value(300))
+                .andExpect(jsonPath("$.data.stages[0].summary.nutrientName").value("PROTEIN"))
+                .andExpect(jsonPath("$.data.stages[0].guide").isNotEmpty())
+                .andExpect(jsonPath("$.data.stages[0].items[0].name").isNotEmpty())
                 .andExpect(jsonPath("$.data.stages[1].title").value("채소·식이섬유 반찬"))
                 .andExpect(jsonPath("$.data.stages[1].recommendedSeconds").value(300))
                 .andExpect(jsonPath("$.data.stages[2].title").value("밥·면"))
                 .andExpect(jsonPath("$.data.stages[2].recommendedSeconds").doesNotExist())
+                .andExpect(jsonPath("$.data.recommendedOrder.length()").value(3))
+                .andExpect(jsonPath("$.data.recommendedOrder[0].order").value(1))
                 .andExpect(jsonPath("$.data.guideTone").value("NON_RESTRICTIVE"));
     }
 

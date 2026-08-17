@@ -14,8 +14,12 @@ public class SideMenuController {
 
     @GetMapping
     public ApiResponse<SideMenuListResponse> get(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) String nutrientFocus,
-            @RequestParam(defaultValue = "true") boolean activeOnly) {
-        return ApiResponse.success(service.get(nutrientFocus, activeOnly));
+            @RequestParam(defaultValue = "true") boolean activeOnly,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(service.get(query, category, nutrientFocus, activeOnly, page, size));
     }
 }

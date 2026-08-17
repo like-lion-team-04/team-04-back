@@ -94,7 +94,10 @@ class HistoryEvidenceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.sources.length()").value(1))
                 .andExpect(jsonPath("$.data.sources[0].type").value("GI"))
-                .andExpect(jsonPath("$.data.calculation.glFormula").value("GI × availableCarbohydrateG / 100"));
+                .andExpect(jsonPath("$.data.sources[0].description").isNotEmpty())
+                .andExpect(jsonPath("$.data.calculation.glFormula").value("GI × availableCarbohydrateG / 100"))
+                .andExpect(jsonPath("$.data.calculation.reductionCap").value(0.30))
+                .andExpect(jsonPath("$.data.calculation.stageIntervalRule.defaultMinutes").value(5));
     }
 
     @Test
