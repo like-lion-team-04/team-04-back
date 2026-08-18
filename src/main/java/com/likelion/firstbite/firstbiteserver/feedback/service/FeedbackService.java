@@ -43,6 +43,38 @@ public class FeedbackService {
                 .orElseGet(PendingFeedbackResponse::none);
     }
 
+    @Transactional(readOnly = true)
+    public FeedbackStatusResponse getStatus(UUID memberId, LocalDate date) {
+        LocalDate target = date == null ? LocalDate.now(SERVICE_ZONE).minusDays(1) : date;
+        Instant from = target.atStartOfDay(SERVICE_ZONE).toInstant();
+        Instant to = target.plusDays(1).atStartOfDay(SERVICE_ZONE).toInstant();
+        Instant now = Instant.now();
+        var records = recordRepository.findHistoryRange(memberId, from, to);
+        if (records.isEmpty()) return FeedbackStatusResponse.none();
+
+        var pending = records.stream()
+                .filter(record -> feedbackRepository.findByRecordId(record.getId()).isEmpty())
+                .filter(record -> !now.isBefore(eligibleStart(record)) && now.isBefore(expiresExclusive(record)))
+                .findFirst();
+        if (pending.isPresent()) {
+            CoachingRecord record = pending.get();
+            return statusResponse(FeedbackStatusResponse.Status.PENDING, record, null);
+        }
+
+        for (CoachingRecord record : records) {
+            var feedback = feedbackRepository.findByRecordId(record.getId());
+            if (feedback.isPresent()) {
+                return statusResponse(FeedbackStatusResponse.Status.ANSWERED, record, feedback.get());
+            }
+        }
+
+        return records.stream()
+                .filter(record -> !now.isBefore(expiresExclusive(record)))
+                .findFirst()
+                .map(record -> statusResponse(FeedbackStatusResponse.Status.EXPIRED, record, null))
+                .orElseGet(FeedbackStatusResponse::none);
+    }
+
     @Transactional
     public SubmitFeedbackResponse submit(UUID memberId, UUID recordId, UUID key, SubmitFeedbackRequest request) {
         validateRequest(key, request);
@@ -107,6 +139,15 @@ public class FeedbackService {
     private SubmitFeedbackResponse response(CoachingFeedback feedback) {
         return new SubmitFeedbackResponse(feedback.getId(), feedback.getRecordId(), feedback.getSleepinessScore(),
                 feedback.getFeedbackCount(), feedback.isPersonalizationUpdated());
+    }
+
+    private FeedbackStatusResponse statusResponse(FeedbackStatusResponse.Status status, CoachingRecord record,
+                                                  CoachingFeedback feedback) {
+        return new FeedbackStatusResponse(status, record.getId(), "어제 오후는 어땠어요?",
+                new FeedbackStatusResponse.Scale(1, 5),
+                feedback == null ? null : feedback.getSleepinessScore(),
+                feedback == null ? null : feedback.getAnsweredAt(),
+                expiresExclusive(record).minusSeconds(1));
     }
 
     private String hash(String value) {

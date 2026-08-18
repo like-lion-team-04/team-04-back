@@ -24,6 +24,13 @@ public class FeedbackController {
         return ApiResponse.success(feedbackService.getPending(memberId, date));
     }
 
+    @GetMapping("/api/v1/feedbacks/status")
+    public ApiResponse<FeedbackStatusResponse> getStatus(
+            @AuthenticationPrincipal UUID memberId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.success(feedbackService.getStatus(memberId, date));
+    }
+
     @PostMapping("/api/v1/coaching-records/{recordId}/feedback")
     public ResponseEntity<ApiResponse<SubmitFeedbackResponse>> submit(
             @AuthenticationPrincipal UUID memberId,

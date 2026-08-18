@@ -68,6 +68,13 @@ class FeedbackPersonalizationControllerTest {
                 .andExpect(jsonPath("$.data.recordId").value(record.getId().toString()))
                 .andExpect(jsonPath("$.data.scale.min").value(1)).andExpect(jsonPath("$.data.scale.max").value(5));
 
+        mockMvc.perform(get("/api/v1/feedbacks/status").header("Authorization", bearer()).param("date", date))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
+                .andExpect(jsonPath("$.data.recordId").value(record.getId().toString()))
+                .andExpect(jsonPath("$.data.sleepinessScore").doesNotExist())
+                .andExpect(jsonPath("$.data.expiresAt").isNotEmpty());
+
         mockMvc.perform(post("/api/v1/coaching-records/{recordId}/feedback", record.getId())
                         .header("Authorization", bearer()).header("Idempotency-Key", UUID.randomUUID())
                         .contentType(MediaType.APPLICATION_JSON).content(body(4)))
@@ -77,6 +84,31 @@ class FeedbackPersonalizationControllerTest {
 
         mockMvc.perform(get("/api/v1/feedbacks/pending").header("Authorization", bearer()).param("date", date))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.pending").value(false));
+
+        mockMvc.perform(get("/api/v1/feedbacks/status").header("Authorization", bearer()).param("date", date))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("ANSWERED"))
+                .andExpect(jsonPath("$.data.recordId").value(record.getId().toString()))
+                .andExpect(jsonPath("$.data.sleepinessScore").value(4))
+                .andExpect(jsonPath("$.data.answeredAt").isNotEmpty());
+    }
+
+    @Test
+    void distinguishesNoTargetAndExpiredFeedback() throws Exception {
+        String noRecordDate = LocalDate.now(SEOUL).minusDays(10).toString();
+        mockMvc.perform(get("/api/v1/feedbacks/status").header("Authorization", bearer())
+                        .param("date", noRecordDate))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("NONE"))
+                .andExpect(jsonPath("$.data.recordId").doesNotExist());
+
+        CoachingRecord expired = completedRecordDaysAgo(4, 1);
+        String expiredDate = expired.getCompletedAt().atZone(SEOUL).toLocalDate().toString();
+        mockMvc.perform(get("/api/v1/feedbacks/status").header("Authorization", bearer())
+                        .param("date", expiredDate))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("EXPIRED"))
+                .andExpect(jsonPath("$.data.recordId").value(expired.getId().toString()));
     }
 
     @Test
@@ -140,9 +172,13 @@ class FeedbackPersonalizationControllerTest {
     }
 
     private CoachingRecord completedRecord(int sequence) {
+        return completedRecordDaysAgo(1, sequence);
+    }
+
+    private CoachingRecord completedRecordDaysAgo(int daysAgo, int sequence) {
         Meal meal = Meal.draft(member.getId(), MealSource.MANUAL, null);
         meal.addItem(MealItem.from(food, BigDecimal.ONE)); mealRepository.save(meal);
-        Instant completedAt = LocalDate.now(SEOUL).minusDays(1).atTime(12, sequence)
+        Instant completedAt = LocalDate.now(SEOUL).minusDays(daysAgo).atTime(12, sequence)
                 .atZone(SEOUL).toInstant();
         CoachingSession session = CoachingSession.start(meal.getId(), member.getId(), 1, 3, 300,
                 UUID.randomUUID(), "start-" + sequence, completedAt.minusSeconds(600));

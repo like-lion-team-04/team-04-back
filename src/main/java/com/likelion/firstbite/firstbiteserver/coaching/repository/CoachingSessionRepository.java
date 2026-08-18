@@ -11,6 +11,7 @@ import jakarta.persistence.LockModeType;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.Collection;
 import java.util.UUID;
 
 public interface CoachingSessionRepository extends JpaRepository<CoachingSession, UUID> {
@@ -18,6 +19,11 @@ public interface CoachingSessionRepository extends JpaRepository<CoachingSession
             UUID memberId, UUID idempotencyKey, Instant cutoff);
 
     boolean existsByMemberIdAndStatus(UUID memberId, CoachingSessionStatus status);
+
+    boolean existsByMemberIdAndStatusIn(UUID memberId, Collection<CoachingSessionStatus> statuses);
+
+    Optional<CoachingSession> findFirstByMemberIdAndStatusInOrderByUpdatedAtDesc(
+            UUID memberId, Collection<CoachingSessionStatus> statuses);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select session from CoachingSession session where session.id = :id")

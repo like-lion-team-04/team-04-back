@@ -27,6 +27,8 @@ public class CoachingSession {
     @Column(name = "started_at", nullable = false) private Instant startedAt;
     @Column(name = "stage_started_at", nullable = false) private Instant stageStartedAt;
     @Column(name = "stage_ends_at") private Instant stageEndsAt;
+    @Column(name = "paused_at") private Instant pausedAt;
+    @Column(name = "paused_remaining_seconds") private Long pausedRemainingSeconds;
     @Column(name = "completed_at") private Instant completedAt;
     @Column(name = "idempotency_key", nullable = false) private UUID idempotencyKey;
     @Column(name = "request_hash", nullable = false, length = 64) private String requestHash;
@@ -65,8 +67,42 @@ public class CoachingSession {
         return new StageAdvance(previousStage, result, actualSeconds, occurredAt, receivedAt);
     }
 
+    public void pause(Instant receivedAt) {
+        if (status != CoachingSessionStatus.IN_PROGRESS) {
+            throw new IllegalStateException("진행 중인 세션만 일시정지할 수 있습니다.");
+        }
+        pausedRemainingSeconds = stageEndsAt == null
+                ? null
+                : Math.max(0, Duration.between(receivedAt, stageEndsAt).getSeconds());
+        pausedAt = receivedAt;
+        stageEndsAt = null;
+        status = CoachingSessionStatus.PAUSED;
+        updatedAt = receivedAt;
+    }
+
+    public void resume(Instant receivedAt) {
+        if (status != CoachingSessionStatus.PAUSED) {
+            throw new IllegalStateException("일시정지된 세션만 재개할 수 있습니다.");
+        }
+        Duration pausedDuration = Duration.between(pausedAt, receivedAt);
+        stageStartedAt = stageStartedAt.plus(pausedDuration);
+        stageEndsAt = pausedRemainingSeconds == null ? null : receivedAt.plusSeconds(pausedRemainingSeconds);
+        pausedAt = null;
+        pausedRemainingSeconds = null;
+        status = CoachingSessionStatus.IN_PROGRESS;
+        updatedAt = receivedAt;
+    }
+
+    public long remainingSeconds(Instant now) {
+        if (status == CoachingSessionStatus.PAUSED) {
+            return pausedRemainingSeconds == null ? 0 : pausedRemainingSeconds;
+        }
+        return stageEndsAt == null ? 0 : Math.max(0, Duration.between(now, stageEndsAt).getSeconds());
+    }
+
     public StageAdvance finishCurrentStage(CompletionReason reason, Instant occurredAt, Instant receivedAt) {
-        long actualSeconds = Math.max(0, Duration.between(stageStartedAt, receivedAt).getSeconds());
+        Instant effectiveEnd = status == CoachingSessionStatus.PAUSED ? pausedAt : receivedAt;
+        long actualSeconds = Math.max(0, Duration.between(stageStartedAt, effectiveEnd).getSeconds());
         StageResult result = reason == CompletionReason.COMPLETED ? StageResult.COMPLETED : StageResult.SKIPPED;
         return new StageAdvance(currentStage, result, actualSeconds, occurredAt, receivedAt);
     }
@@ -75,6 +111,8 @@ public class CoachingSession {
         status = CoachingSessionStatus.COMPLETED;
         this.completedAt = completedAt;
         stageEndsAt = null;
+        pausedAt = null;
+        pausedRemainingSeconds = null;
         updatedAt = completedAt;
     }
 
