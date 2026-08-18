@@ -76,6 +76,33 @@ class CoachingSessionControllerTest {
     }
 
     @Test
+    void returnsNoActiveSessionBeforeStart() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/coaching-sessions/active")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.active").value(false))
+                .andExpect(jsonPath("$.data.session").doesNotExist());
+    }
+
+    @Test
+    void restoresActiveSession() throws Exception {
+        Meal meal = analyzedMeal(member.getId(), "active-restore");
+        UUID sessionId = startSession(meal.getId());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/coaching-sessions/active")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.active").value(true))
+                .andExpect(jsonPath("$.data.session.sessionId").value(sessionId.toString()))
+                .andExpect(jsonPath("$.data.session.mealId").value(meal.getId().toString()))
+                .andExpect(jsonPath("$.data.session.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.session.totalStages").value(3))
+                .andExpect(jsonPath("$.data.session.remainingSeconds").isNumber());
+    }
+
+    @Test
     void returnsSameSessionForSameIdempotencyKey() throws Exception {
         Meal meal = analyzedMeal(member.getId(), "same-key");
         UUID key = UUID.randomUUID();
@@ -175,9 +202,50 @@ class CoachingSessionControllerTest {
         Meal meal = analyzedMeal(member.getId(), "progress-invalid");
         UUID sessionId = startSession(meal.getId());
 
-        mockMvc.perform(patchProgress(sessionId, "PAUSE", 1))
+        mockMvc.perform(patchProgress(sessionId, "INVALID", 1))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("COACHING_ACTION_INVALID"));
+    }
+
+    @Test
+    void pausesAndResumesTimerWhilePreservingRemainingTime() throws Exception {
+        Meal meal = analyzedMeal(member.getId(), "timer-pause-resume");
+        UUID sessionId = startSession(meal.getId());
+
+        mockMvc.perform(patchTimer(sessionId, "PAUSE", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PAUSED"))
+                .andExpect(jsonPath("$.data.stageEndsAt").doesNotExist())
+                .andExpect(jsonPath("$.data.pausedAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.remainingSeconds").isNumber());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/api/v1/coaching-sessions/active")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.session.status").value("PAUSED"))
+                .andExpect(jsonPath("$.data.session.stageEndsAt").doesNotExist())
+                .andExpect(jsonPath("$.data.session.pausedAt").isNotEmpty());
+
+        mockMvc.perform(patchTimer(sessionId, "RESUME", 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.data.stageEndsAt").isNotEmpty())
+                .andExpect(jsonPath("$.data.pausedAt").doesNotExist());
+    }
+
+    @Test
+    void rejectsDuplicatePauseAndStageAdvanceWhilePaused() throws Exception {
+        Meal meal = analyzedMeal(member.getId(), "timer-state-conflict");
+        UUID sessionId = startSession(meal.getId());
+        mockMvc.perform(patchTimer(sessionId, "PAUSE", 1)).andExpect(status().isOk());
+
+        mockMvc.perform(patchTimer(sessionId, "PAUSE", 1))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code").value("COACHING_TIMER_STATE_CONFLICT"));
+        mockMvc.perform(patchProgress(sessionId, "NEXT", 1))
+                .andExpect(status().isGone())
+                .andExpect(jsonPath("$.error.code").value("COACHING_SESSION_ENDED"));
     }
 
     @Test
@@ -206,7 +274,20 @@ class CoachingSessionControllerTest {
                 .andExpect(jsonPath("$.data.status").value("COMPLETED"))
                 .andExpect(jsonPath("$.data.summary.completedStages").value(3))
                 .andExpect(jsonPath("$.data.summary.skippedStages").value(0))
-                .andExpect(jsonPath("$.data.summary.totalSeconds").isNumber());
+                .andExpect(jsonPath("$.data.summary.totalStages").value(3))
+                .andExpect(jsonPath("$.data.summary.totalSeconds").isNumber())
+                .andExpect(jsonPath("$.data.summary.adherenceRate").value(100))
+                .andExpect(jsonPath("$.data.stages.length()").value(3))
+                .andExpect(jsonPath("$.data.stages[0].stage").value(1))
+                .andExpect(jsonPath("$.data.stages[0].title").isNotEmpty())
+                .andExpect(jsonPath("$.data.stages[0].recommendedSeconds").value(300))
+                .andExpect(jsonPath("$.data.stages[0].actualSeconds").isNumber())
+                .andExpect(jsonPath("$.data.stages[0].result").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.stages[2].recommendedSeconds").doesNotExist())
+                .andExpect(jsonPath("$.data.items.length()").value(3))
+                .andExpect(jsonPath("$.data.items[0].order").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").isNotEmpty())
+                .andExpect(jsonPath("$.data.items[0].servingMultiplier").isNumber());
 
         org.assertj.core.api.Assertions.assertThat(coachingRecordRepository.count()).isEqualTo(1);
         org.assertj.core.api.Assertions.assertThat(stageRecordRepository.countBySessionId(sessionId)).isEqualTo(3);
@@ -222,7 +303,12 @@ class CoachingSessionControllerTest {
         mockMvc.perform(completeRequest(sessionId, "USER_ENDED", UUID.randomUUID(), java.time.Instant.now()))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.summary.completedStages").value(0))
-                .andExpect(jsonPath("$.data.summary.skippedStages").value(1));
+                .andExpect(jsonPath("$.data.summary.skippedStages").value(1))
+                .andExpect(jsonPath("$.data.summary.totalStages").value(3))
+                .andExpect(jsonPath("$.data.summary.adherenceRate").value(0))
+                .andExpect(jsonPath("$.data.stages[0].result").value("SKIPPED"))
+                .andExpect(jsonPath("$.data.stages[1].result").value("NOT_STARTED"))
+                .andExpect(jsonPath("$.data.stages[1].actualSeconds").doesNotExist());
     }
 
     @Test
@@ -276,6 +362,17 @@ class CoachingSessionControllerTest {
             UUID sessionId, String action, int expectedStage) {
         return org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                 .patch("/api/v1/coaching-sessions/{sessionId}", sessionId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"action":"%s","expectedStage":%d,"occurredAt":"%s"}
+                        """.formatted(action, expectedStage, java.time.Instant.now()));
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder patchTimer(
+            UUID sessionId, String action, int expectedStage) {
+        return org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .patch("/api/v1/coaching-sessions/{sessionId}/timer", sessionId)
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""

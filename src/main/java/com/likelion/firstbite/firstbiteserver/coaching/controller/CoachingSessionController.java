@@ -6,6 +6,9 @@ import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingStageRe
 import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingStageResponse;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.CompleteCoachingSessionRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.CompleteCoachingSessionResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.ActiveCoachingSessionResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.CoachingTimerResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingTimerRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.service.CoachingSessionService;
 import com.likelion.firstbite.firstbiteserver.common.api.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,12 @@ import java.util.UUID;
 public class CoachingSessionController {
     private final CoachingSessionService sessionService;
 
+    @GetMapping("/active")
+    public ApiResponse<ActiveCoachingSessionResponse> getActive(
+            @AuthenticationPrincipal UUID memberId) {
+        return ApiResponse.success(sessionService.getActive(memberId));
+    }
+
     @PostMapping
     public ResponseEntity<ApiResponse<CoachingSessionResponse>> start(
             @AuthenticationPrincipal UUID memberId,
@@ -37,6 +46,14 @@ public class CoachingSessionController {
             @PathVariable UUID sessionId,
             @RequestBody UpdateCoachingStageRequest request) {
         return ApiResponse.success(sessionService.updateStage(memberId, sessionId, request));
+    }
+
+    @PatchMapping("/{sessionId}/timer")
+    public ApiResponse<CoachingTimerResponse> updateTimer(
+            @AuthenticationPrincipal UUID memberId,
+            @PathVariable UUID sessionId,
+            @RequestBody UpdateCoachingTimerRequest request) {
+        return ApiResponse.success(sessionService.updateTimer(memberId, sessionId, request));
     }
 
     @PostMapping("/{sessionId}/complete")

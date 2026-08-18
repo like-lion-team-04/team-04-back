@@ -7,12 +7,16 @@ import com.likelion.firstbite.firstbiteserver.coaching.domain.ProgressAction;
 import com.likelion.firstbite.firstbiteserver.coaching.domain.CompletionReason;
 import com.likelion.firstbite.firstbiteserver.coaching.domain.CoachingRecord;
 import com.likelion.firstbite.firstbiteserver.coaching.domain.StageResult;
+import com.likelion.firstbite.firstbiteserver.coaching.domain.TimerAction;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.CoachingSessionResponse;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.StartCoachingSessionRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingStageRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingStageResponse;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.CompleteCoachingSessionRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.dto.CompleteCoachingSessionResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.ActiveCoachingSessionResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.CoachingTimerResponse;
+import com.likelion.firstbite.firstbiteserver.coaching.dto.UpdateCoachingTimerRequest;
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingSessionRepository;
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingStageRecordRepository;
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingRecordRepository;
@@ -32,15 +36,26 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.HexFormat;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class CoachingSessionService {
+    private static final List<CoachingSessionStatus> ACTIVE_STATUSES =
+            List.of(CoachingSessionStatus.IN_PROGRESS, CoachingSessionStatus.PAUSED);
     private final CoachingSessionRepository sessionRepository;
     private final MealRepository mealRepository;
     private final CoachingPlanService coachingPlanService;
     private final CoachingStageRecordRepository stageRecordRepository;
     private final CoachingRecordRepository coachingRecordRepository;
+
+    @Transactional(readOnly = true)
+    public ActiveCoachingSessionResponse getActive(UUID memberId) {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        return sessionRepository.findFirstByMemberIdAndStatusInOrderByUpdatedAtDesc(memberId, ACTIVE_STATUSES)
+                .map(session -> ActiveCoachingSessionResponse.from(session, now))
+                .orElseGet(ActiveCoachingSessionResponse::none);
+    }
 
     @Transactional
     public CoachingSessionResponse start(UUID memberId, UUID idempotencyKey, StartCoachingSessionRequest request) {
@@ -73,7 +88,7 @@ public class CoachingSessionService {
             throw new BusinessException(HttpStatus.CONFLICT, "COACHING_PLAN_CHANGED",
                     "코칭 계획이 변경되었습니다. 최신 계획을 다시 확인해 주세요.");
         }
-        if (sessionRepository.existsByMemberIdAndStatus(memberId, CoachingSessionStatus.IN_PROGRESS)) {
+        if (sessionRepository.existsByMemberIdAndStatusIn(memberId, ACTIVE_STATUSES)) {
             throw new BusinessException(HttpStatus.CONFLICT, "COACHING_ALREADY_ACTIVE", "이미 진행 중인 코칭 세션이 있습니다.");
         }
 
@@ -124,6 +139,42 @@ public class CoachingSessionService {
     }
 
     @Transactional
+    public CoachingTimerResponse updateTimer(UUID memberId, UUID sessionId, UpdateCoachingTimerRequest request) {
+        TimerAction action = request == null ? null : TimerAction.parse(request.action());
+        if (action == null || request.expectedStage() == null || request.expectedStage() < 1
+                || request.occurredAt() == null) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "COACHING_TIMER_ACTION_INVALID",
+                    "타이머 동작, 현재 단계와 동작 시각이 올바르지 않습니다.");
+        }
+        CoachingSession session = sessionRepository.findByIdForUpdate(sessionId)
+                .orElseThrow(() -> new BusinessException(HttpStatus.NOT_FOUND, "COACHING_SESSION_NOT_FOUND",
+                        "코칭 세션을 찾을 수 없습니다."));
+        if (!session.belongsTo(memberId)) {
+            throw new BusinessException(HttpStatus.FORBIDDEN, "COACHING_SESSION_FORBIDDEN",
+                    "다른 사용자의 코칭 세션에 접근할 수 없습니다.");
+        }
+        if (session.getStatus() == CoachingSessionStatus.COMPLETED
+                || session.getStatus() == CoachingSessionStatus.CANCELLED) {
+            throw new BusinessException(HttpStatus.GONE, "COACHING_SESSION_ENDED", "이미 종료된 코칭 세션입니다.");
+        }
+        if (session.getCurrentStage() != request.expectedStage()) {
+            throw new BusinessException(HttpStatus.CONFLICT, "COACHING_STAGE_CONFLICT",
+                    "서버의 현재 단계와 요청 단계가 일치하지 않습니다.");
+        }
+        if ((action == TimerAction.PAUSE && session.getStatus() != CoachingSessionStatus.IN_PROGRESS)
+                || (action == TimerAction.RESUME && session.getStatus() != CoachingSessionStatus.PAUSED)) {
+            throw new BusinessException(HttpStatus.CONFLICT, "COACHING_TIMER_STATE_CONFLICT",
+                    "현재 타이머 상태에서 요청한 동작을 수행할 수 없습니다.");
+        }
+
+        Instant receivedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        if (action == TimerAction.PAUSE) session.pause(receivedAt);
+        else session.resume(receivedAt);
+        sessionRepository.save(session);
+        return CoachingTimerResponse.from(session, receivedAt);
+    }
+
+    @Transactional
     public CompleteCoachingSessionResponse complete(UUID memberId, UUID sessionId, UUID idempotencyKey,
                                                      CompleteCoachingSessionRequest request) {
         CompletionReason reason = request == null ? null : CompletionReason.parse(request.reason());
@@ -140,7 +191,7 @@ public class CoachingSessionService {
                 throw new BusinessException(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_CONFLICT",
                         "동일한 Idempotency-Key를 다른 요청에 사용할 수 없습니다.");
             }
-            return CompleteCoachingSessionResponse.from(existing.get());
+            return completionResponse(existing.get());
         }
 
         CoachingSession session = sessionRepository.findByIdForUpdate(sessionId)
@@ -150,7 +201,8 @@ public class CoachingSessionService {
             throw new BusinessException(HttpStatus.FORBIDDEN, "COACHING_SESSION_FORBIDDEN",
                     "다른 사용자의 코칭 세션에 접근할 수 없습니다.");
         }
-        if (session.getStatus() != CoachingSessionStatus.IN_PROGRESS) {
+        if (session.getStatus() != CoachingSessionStatus.IN_PROGRESS
+                && session.getStatus() != CoachingSessionStatus.PAUSED) {
             throw new BusinessException(HttpStatus.CONFLICT, "COACHING_ALREADY_COMPLETED", "이미 종료된 코칭 세션입니다.");
         }
         if (reason == CompletionReason.COMPLETED && !session.isLastStage()) {
@@ -173,7 +225,13 @@ public class CoachingSessionService {
         CoachingRecord record = coachingRecordRepository.save(CoachingRecord.create(session, reason,
                 completedStages, skippedStages, totalSeconds, request.endedAt(), completedAt,
                 idempotencyKey, requestHash));
-        return CompleteCoachingSessionResponse.from(record);
+        return completionResponse(record);
+    }
+
+    private CompleteCoachingSessionResponse completionResponse(CoachingRecord record) {
+        var plan = coachingPlanService.getPlan(record.getMemberId(), record.getMealId());
+        var stages = stageRecordRepository.findAllBySessionIdOrderByStageAsc(record.getSessionId());
+        return CompleteCoachingSessionResponse.from(record, plan, stages);
     }
 
     private String hash(String value) {
