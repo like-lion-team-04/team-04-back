@@ -1,7 +1,11 @@
 package com.likelion.firstbite.firstbiteserver.history.service;
 
+import com.likelion.firstbite.firstbiteserver.analysis.domain.MealAnalysis;
+import com.likelion.firstbite.firstbiteserver.analysis.repository.MealAnalysisRepository;
 import com.likelion.firstbite.firstbiteserver.coaching.domain.CoachingRecord;
+import com.likelion.firstbite.firstbiteserver.coaching.domain.CoachingStageRecord;
 import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingRecordRepository;
+import com.likelion.firstbite.firstbiteserver.coaching.repository.CoachingStageRecordRepository;
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
 import com.likelion.firstbite.firstbiteserver.history.dto.CoachingHistoryListResponse;
 import com.likelion.firstbite.firstbiteserver.history.dto.HistoryPageMeta;
@@ -18,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
@@ -30,6 +37,8 @@ public class CoachingHistoryService {
     private final CoachingRecordRepository recordRepository;
     private final MealRepository mealRepository;
     private final CoachingFeedbackRepository feedbackRepository;
+    private final CoachingStageRecordRepository stageRecordRepository;
+    private final MealAnalysisRepository analysisRepository;
 
     @Transactional(readOnly = true)
     public Result getHistory(UUID memberId, LocalDate from, LocalDate to, int page, int size) {
@@ -44,14 +53,37 @@ public class CoachingHistoryService {
         Map<UUID, CoachingFeedback> feedbacks = feedbackRepository.findAllByRecordIdIn(
                         records.getContent().stream().map(CoachingRecord::getId).toList()).stream()
                 .collect(Collectors.toMap(CoachingFeedback::getRecordId, Function.identity()));
+        var sessionIds = records.getContent().stream().map(CoachingRecord::getSessionId).distinct().toList();
+        List<CoachingStageRecord> stageRecords = sessionIds.isEmpty() ? List.of()
+                : stageRecordRepository.findAllBySessionIdInOrderBySessionIdAscStageAsc(sessionIds);
+        Map<UUID, List<CoachingStageRecord>> stagesBySession = stageRecords.stream()
+                .collect(Collectors.groupingBy(CoachingStageRecord::getSessionId));
+        List<MealAnalysis> analyses = mealIds.isEmpty() ? List.of()
+                : analysisRepository.findAllByMealIdInOrderByCreatedAtDesc(mealIds);
+        Map<UUID, MealAnalysis> latestAnalysisByMeal = new HashMap<>();
+        analyses.forEach(analysis -> latestAnalysisByMeal.putIfAbsent(analysis.getMealId(), analysis));
 
         var items = records.getContent().stream().map(record -> {
             Meal meal = meals.get(record.getMealId());
             String mealName = meal == null ? "삭제된 식사" : summarizeMeal(meal);
             CoachingFeedback feedback = feedbacks.get(record.getId());
             Integer score = feedback == null || feedback.isSkipped() ? null : feedback.getSleepinessScore();
+            List<CoachingHistoryListResponse.MenuItem> menuItems = meal == null ? List.of() : meal.getItems().stream()
+                    .map(item -> new CoachingHistoryListResponse.MenuItem(item.getFood().getId(),
+                            item.getFoodName(), item.getServingMultiplier()))
+                    .toList();
+            List<CoachingHistoryListResponse.StageResult> stageResults = stagesBySession
+                    .getOrDefault(record.getSessionId(), List.of()).stream()
+                    .map(stage -> new CoachingHistoryListResponse.StageResult(stage.getStage(),
+                            stage.getResult().name(), stage.getActualSeconds()))
+                    .toList();
+            MealAnalysis analysis = latestAnalysisByMeal.get(record.getMealId());
+            boolean personalizationApplied = analysis != null
+                    && analysis.getPersonalCoefficient().compareTo(BigDecimal.ONE) != 0;
             return new CoachingHistoryListResponse.Item(record.getId(), mealName, record.getCompletedAt(),
-                    record.getCompletedStages(), record.getTotalStages(), score);
+                    record.getCompletedStages(), record.getTotalStages(), score, record.getReason().name(),
+                    record.getSkippedStages(), record.getTotalSeconds(), personalizationApplied,
+                    menuItems, stageResults);
         }).toList();
         return new Result(new CoachingHistoryListResponse(items),
                 new HistoryPageMeta(page, size, records.getTotalElements(), records.getTotalPages()));

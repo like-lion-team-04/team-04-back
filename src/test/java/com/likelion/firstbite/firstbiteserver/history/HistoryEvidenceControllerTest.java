@@ -1,6 +1,8 @@
 package com.likelion.firstbite.firstbiteserver.history;
 
 import com.likelion.firstbite.firstbiteserver.auth.token.JwtTokenService;
+import com.likelion.firstbite.firstbiteserver.analysis.domain.MealAnalysis;
+import com.likelion.firstbite.firstbiteserver.analysis.repository.MealAnalysisRepository;
 import com.likelion.firstbite.firstbiteserver.member.domain.Member;
 import com.likelion.firstbite.firstbiteserver.member.repository.MemberRepository;
 import com.likelion.firstbite.firstbiteserver.coaching.domain.*;
@@ -8,6 +10,8 @@ import com.likelion.firstbite.firstbiteserver.coaching.repository.*;
 import com.likelion.firstbite.firstbiteserver.food.domain.*;
 import com.likelion.firstbite.firstbiteserver.food.repository.FoodRepository;
 import com.likelion.firstbite.firstbiteserver.history.repository.MealReuseRepository;
+import com.likelion.firstbite.firstbiteserver.feedback.domain.CoachingFeedback;
+import com.likelion.firstbite.firstbiteserver.feedback.repository.CoachingFeedbackRepository;
 import com.likelion.firstbite.firstbiteserver.meal.domain.*;
 import com.likelion.firstbite.firstbiteserver.meal.repository.MealRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,12 +46,16 @@ class HistoryEvidenceControllerTest {
     @Autowired MealReuseRepository reuseRepository;
     @Autowired MealRepository mealRepository;
     @Autowired FoodRepository foodRepository;
+    @Autowired CoachingFeedbackRepository feedbackRepository;
+    @Autowired MealAnalysisRepository analysisRepository;
     private Member member;
     private String token;
 
     @BeforeEach
     void setUp() {
         reuseRepository.deleteAll();
+        feedbackRepository.deleteAll();
+        analysisRepository.deleteAll();
         recordRepository.deleteAll();
         stageRecordRepository.deleteAll();
         sessionRepository.deleteAll();
@@ -75,6 +83,9 @@ class HistoryEvidenceControllerTest {
                         .param("from", "2026-08-03").param("to", "2026-08-09"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.coachingCount").value(0))
+                .andExpect(jsonPath("$.data.completedCoachingCount").value(0))
+                .andExpect(jsonPath("$.data.userEndedCoachingCount").value(0))
+                .andExpect(jsonPath("$.data.skippedStageCount").value(0))
                 .andExpect(jsonPath("$.data.completionRate").value(0.0))
                 .andExpect(jsonPath("$.data.daily.length()").value(7));
     }
@@ -129,26 +140,63 @@ class HistoryEvidenceControllerTest {
         Meal meal = Meal.draft(member.getId(), MealSource.MANUAL, null);
         meal.addItem(MealItem.from(rice, BigDecimal.ONE));
         meal.addItem(MealItem.from(egg, new BigDecimal("0.5")));
+        meal.markAnalyzed();
         mealRepository.save(meal);
+        analysisRepository.save(MealAnalysis.create(meal.getId(), member.getId(), UUID.randomUUID(),
+                "analysis-hash", new BigDecimal("20"), new BigDecimal("15"), new BigDecimal("0.25"),
+                BigDecimal.ONE, BigDecimal.ZERO));
         Instant completedAt = Instant.parse("2026-08-09T04:20:00Z");
         CoachingSession session = CoachingSession.start(meal.getId(), member.getId(), 1, 3, 300,
                 UUID.randomUUID(), "start-hash", completedAt.minusSeconds(600));
         session.complete(completedAt);
         sessionRepository.save(session);
+        stageRecordRepository.save(CoachingStageRecord.from(session.getId(), ProgressAction.SKIP,
+                new CoachingSession.StageAdvance(1, StageResult.SKIPPED, 600, completedAt, completedAt)));
         CoachingRecord record = recordRepository.save(CoachingRecord.create(session, CompletionReason.USER_ENDED,
                 1, 1, 600, completedAt, completedAt, UUID.randomUUID(), "complete-hash"));
+        CoachingFeedback feedback = CoachingFeedback.create(record.getId(), member.getId(), 2, false,
+                completedAt.plusSeconds(86400), UUID.randomUUID(), "feedback-hash", completedAt.plusSeconds(86400));
+        feedback.markResult(1, false);
+        feedbackRepository.save(feedback);
 
         mockMvc.perform(get("/api/v1/coaching-records").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.items[0].mealName").value("밥 외 1개"))
                 .andExpect(jsonPath("$.data.items[0].completedStages").value(1))
-                .andExpect(jsonPath("$.data.items[0].totalStages").value(3));
+                .andExpect(jsonPath("$.data.items[0].totalStages").value(3))
+                .andExpect(jsonPath("$.data.items[0].completionReason").value("USER_ENDED"))
+                .andExpect(jsonPath("$.data.items[0].skippedStages").value(1))
+                .andExpect(jsonPath("$.data.items[0].totalSeconds").value(600))
+                .andExpect(jsonPath("$.data.items[0].personalizationApplied").value(false))
+                .andExpect(jsonPath("$.data.items[0].menuItems.length()").value(2))
+                .andExpect(jsonPath("$.data.items[0].menuItems[1].name").value("계란"))
+                .andExpect(jsonPath("$.data.items[0].stageResults[0].result").value("SKIPPED"));
+
+        mockMvc.perform(get("/api/v1/coaching-records/summary")
+                        .header("Authorization", "Bearer " + token)
+                        .param("from", "2026-08-09").param("to", "2026-08-09"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.coachingCount").value(1))
+                .andExpect(jsonPath("$.data.completedCoachingCount").value(0))
+                .andExpect(jsonPath("$.data.userEndedCoachingCount").value(1))
+                .andExpect(jsonPath("$.data.skippedStageCount").value(1));
 
         mockMvc.perform(get("/api/v1/coaching-records/{recordId}", record.getId())
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mealId").value(meal.getId().toString()))
+                .andExpect(jsonPath("$.data.mealType").value("LUNCH"))
+                .andExpect(jsonPath("$.data.completionReason").value("USER_ENDED"))
+                .andExpect(jsonPath("$.data.summary.totalSeconds").value(600))
                 .andExpect(jsonPath("$.data.items.length()").value(2))
-                .andExpect(jsonPath("$.data.items[1].name").value("계란"));
+                .andExpect(jsonPath("$.data.items[1].name").value("계란"))
+                .andExpect(jsonPath("$.data.recommendedOrder.length()").value(2))
+                .andExpect(jsonPath("$.data.recommendedOrder[0].order").value(1))
+                .andExpect(jsonPath("$.data.stages[0].title").isNotEmpty())
+                .andExpect(jsonPath("$.data.stages[0].result").value("SKIPPED"))
+                .andExpect(jsonPath("$.data.feedback.feedbackId").value(feedback.getId().toString()))
+                .andExpect(jsonPath("$.data.feedback.status").value("ANSWERED"))
+                .andExpect(jsonPath("$.data.feedback.sleepinessLabel").value("꽤 졸렸어요"));
 
         mockMvc.perform(post("/api/v1/coaching-records/{recordId}/reuse", record.getId())
                         .header("Authorization", "Bearer " + token)
