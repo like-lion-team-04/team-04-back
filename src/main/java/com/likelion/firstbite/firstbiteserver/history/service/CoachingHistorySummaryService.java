@@ -36,6 +36,8 @@ public class CoachingHistorySummaryService {
                 to.plusDays(1).atStartOfDay(zone).toInstant());
         long count = records.size();
         long completed = records.stream().filter(r -> r.getReason() == CompletionReason.COMPLETED).count();
+        long userEnded = records.stream().filter(r -> r.getReason() == CompletionReason.USER_ENDED).count();
+        long skippedStages = records.stream().mapToLong(r -> r.getSkippedStages()).sum();
         long totalStages = records.stream().mapToLong(r -> r.getTotalStages()).sum();
         long completedStages = records.stream().mapToLong(r -> r.getCompletedStages()).sum();
         var feedbackByRecord = feedbackRepository.findAllByRecordIdIn(records.stream().map(r -> r.getId()).toList())
@@ -67,7 +69,7 @@ public class CoachingHistorySummaryService {
             return new CoachingHistorySummaryResponse.Daily(e.getKey(), e.getValue(), score);
         }).toList();
         return new CoachingHistorySummaryResponse(new CoachingHistorySummaryResponse.Period(from, to), count,
-                completionRate, adherenceRate, averageScore, daily);
+                completed, userEnded, skippedStages, completionRate, adherenceRate, averageScore, daily);
     }
 
     private ZoneId resolveZone(String timezone) {
