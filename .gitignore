@@ -40,6 +40,7 @@ out/
 .env
 .env.*
 !.env.example
+!.env.prod.example
 *.pem
 *.key
 *.p12
@@ -75,3 +76,6 @@ uploads/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+### 개발용 로컬 자료 (커밋 제외) ###
+개발용 자료들/

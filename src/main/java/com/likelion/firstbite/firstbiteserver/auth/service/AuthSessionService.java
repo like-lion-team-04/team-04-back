@@ -55,6 +55,17 @@ public class AuthSessionService {
                 jwtTokenService.accessTokenSeconds()), refreshToken);
     }
 
+    /**
+     * 이미 인증된 회원(예: 소셜 로그인 성공)에게 새 Refresh Token 세션을 시작하고 원문 토큰을 반환한다.
+     */
+    @Transactional
+    public String startSession(Member member) {
+        Instant now = Instant.now();
+        String refreshToken = UUID.randomUUID() + "." + UUID.randomUUID();
+        refreshTokenRepository.save(RefreshToken.issue(member, tokenHashService.hash(refreshToken), now, cookieService.lifetime()));
+        return refreshToken;
+    }
+
     @Transactional
     public void logout(UUID authenticatedMemberId, String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) return;

@@ -1,0 +1,15 @@
+# 운영 프로파일. 컨테이너에서 SPRING_PROFILES_ACTIVE=prod 로 활성화된다.
+# 모든 시크릿/DB 접속 정보는 환경변수로 주입한다(.env.prod).
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    open-in-view: false
+  docker:
+    compose:
+      enabled: false
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}

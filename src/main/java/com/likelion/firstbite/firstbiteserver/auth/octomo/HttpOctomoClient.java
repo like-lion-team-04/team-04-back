@@ -2,6 +2,7 @@ package com.likelion.firstbite.firstbiteserver.auth.octomo;
 
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -15,6 +16,7 @@ import java.time.Duration;
 import java.util.Map;
 
 @Component
+@ConditionalOnProperty(prefix = "app.octomo", name = "mock", havingValue = "false", matchIfMissing = true)
 public class HttpOctomoClient implements OctomoClient {
     private static final URI MESSAGE_EXISTS_URI = URI.create("https://api.octoverse.kr/octomo/v1/public/message/exists");
     private final String apiKey;
