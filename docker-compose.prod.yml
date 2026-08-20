@@ -22,6 +22,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       # prod 기본. 소셜 로그인까지 켜려면 .env.prod 에서 SPRING_PROFILES_ACTIVE=prod,oauth
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
@@ -40,12 +42,14 @@ services:
       APP_OCTOMO_MOCK: ${APP_OCTOMO_MOCK:-false}
       OCTOMO_API_KEY: ${OCTOMO_API_KEY:-}
       OCTOMO_RECEIVER_NUMBER: ${OCTOMO_RECEIVER_NUMBER:-16663538}
+      # 이미지 스토리지: 사내 MinIO(S3 호환). 자격증명은 MinIO 루트 계정과 동일하게 사용.
+      AWS_S3_ENDPOINT: ${AWS_S3_ENDPOINT:-http://minio:9000}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-firstbite-images}
       # 선택 통합 (없으면 해당 기능만 비활성)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-}
       # 소셜 로그인 (SPRING_PROFILES_ACTIVE=prod,oauth 일 때만 필요)
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -55,6 +59,34 @@ services:
       OAUTH_FAILURE_REDIRECT: ${OAUTH_FAILURE_REDIRECT:-http://1.201.116.77/login.html}
     expose:
       - "8080"
+
+  # S3 호환 오브젝트 스토리지 (가비아 서버 내부, vdb 디스크에 데이터 저장)
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER를 .env.prod에 설정하세요}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD를 .env.prod에 설정하세요}
+    volumes:
+      # vdb를 마운트한 경로. 미마운트 시 루트 디스크의 named volume으로 폴백하려면 minio-data 사용.
+      - ${MINIO_DATA_DIR:-minio-data}:/data
+    expose:
+      - "9000"
+      - "9001"
+
+  # 최초 1회 버킷 생성(멱등). 완료 후 종료.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do echo waiting for minio; sleep 2; done;
+      mc mb --ignore-existing local/$S3_BUCKET_NAME;
+      echo bucket-ready;
+      "
+    restart: "no"
 
   nginx:
     image: nginx:1.27-alpine
@@ -72,3 +104,4 @@ services:
 
 volumes:
   postgres-data:
+  minio-data:
