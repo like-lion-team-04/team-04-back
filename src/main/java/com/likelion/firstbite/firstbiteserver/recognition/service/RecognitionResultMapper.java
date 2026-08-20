@@ -62,7 +62,7 @@ public class RecognitionResultMapper {
             BigDecimal score = exact ? modelConfidence : modelConfidence.min(new BigDecimal("0.75")
                     .subtract(new BigDecimal("0.10").multiply(BigDecimal.valueOf(index))));
             String quality = food.getGiDataQuality().name().equals("MEASURED") ? "MEASURED" : "ESTIMATED";
-            return new RecognitionStatusResponse.Candidate(food.getId(), food.getName(), clamp(score),
+            return new RecognitionStatusResponse.Candidate(food.getId(), food.getName(), food.getImageUrl(), clamp(score),
                     food.getCarbG(), food.getFiberG(), food.getProteinG(), food.getFatG(),
                     food.getCalorieKcal(), food.getGi(), quality);
         }).toList();

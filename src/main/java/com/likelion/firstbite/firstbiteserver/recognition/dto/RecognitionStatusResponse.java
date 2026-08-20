@@ -31,7 +31,7 @@ public record RecognitionStatusResponse(
     public record Item(String temporaryItemId, String recognizedName, BigDecimal confidence,
                        ConfidenceLevel confidenceLevel, boolean needsConfirmation,
                        List<Candidate> candidates, BigDecimal estimatedServing, boolean estimated) {}
-    public record Candidate(UUID foodId, String name, BigDecimal confidence,
+    public record Candidate(UUID foodId, String name, String imageUrl, BigDecimal confidence,
                             BigDecimal carbohydrateG, BigDecimal fiberG, BigDecimal proteinG,
                             BigDecimal fatG, BigDecimal calorieKcal, BigDecimal gi,
                             String dataQuality) {}
