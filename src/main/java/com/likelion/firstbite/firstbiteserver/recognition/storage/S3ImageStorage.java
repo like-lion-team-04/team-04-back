@@ -1,6 +1,8 @@
 package com.likelion.firstbite.firstbiteserver.recognition.storage;
 
 import com.likelion.firstbite.firstbiteserver.common.exception.BusinessException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -10,6 +12,7 @@ import software.amazon.awssdk.services.s3.model.*;
 
 @Component
 public class S3ImageStorage implements ImageStorage {
+    private static final Logger log = LoggerFactory.getLogger(S3ImageStorage.class);
     private final S3Client s3;
     private final String bucket;
 
@@ -23,13 +26,19 @@ public class S3ImageStorage implements ImageStorage {
         try {
             s3.putObject(PutObjectRequest.builder().bucket(bucket).key(key).contentType(contentType)
                     .serverSideEncryption(ServerSideEncryption.AES256).build(), RequestBody.fromBytes(bytes));
-        } catch (S3Exception exception) { throw storageError(); }
+        } catch (S3Exception exception) {
+            log.error("S3 저장 실패 bucket={}, key={}", bucket, key, exception);
+            throw storageError();
+        }
     }
 
     @Override public byte[] get(String key) {
         requireConfigured();
         try { return s3.getObjectAsBytes(GetObjectRequest.builder().bucket(bucket).key(key).build()).asByteArray(); }
-        catch (S3Exception exception) { throw storageError(); }
+        catch (S3Exception exception) {
+            log.error("S3 조회 실패 bucket={}, key={}", bucket, key, exception);
+            throw storageError();
+        }
     }
 
     @Override public void delete(String key) {
