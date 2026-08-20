@@ -68,6 +68,9 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER를 .env.prod에 설정하세요}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD를 .env.prod에 설정하세요}
+      # SSE-S3(AES256) 지원을 위한 KMS 시크릿. 앱이 서버사이드 암호화로 업로드하므로 필요.
+      # 형식: <키이름>:<base64 32바이트>. .env.prod에서 주입.
+      MINIO_KMS_SECRET_KEY: ${MINIO_KMS_SECRET_KEY:-}
     volumes:
       # vdb를 마운트한 경로. 미마운트 시 루트 디스크의 named volume으로 폴백하려면 minio-data 사용.
       - ${MINIO_DATA_DIR:-minio-data}:/data
