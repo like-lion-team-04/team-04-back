@@ -8,6 +8,7 @@ import com.likelion.firstbite.firstbiteserver.recognition.repository.*;
 import com.likelion.firstbite.firstbiteserver.recognition.storage.ImageStorage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +49,14 @@ public class RecognitionService {
             var recognition = repository.save(Recognition.processing(memberId, image, idempotencyKey, hash, imageType, now));
             events.publishEvent(new RecognitionCreatedEvent(recognition.getId()));
             return RecognitionAcceptedResponse.from(recognition);
+        } catch (DataIntegrityViolationException duplicate) {
+            // 동일 멱등키 동시 요청: 유니크 제약 위반. 방금 올린 객체를 정리하고 기존 결과를 반환(멱등).
+            storage.delete(key);
+            return repository.findFirstByMemberIdAndIdempotencyKeyAndCreatedAtGreaterThanEqualOrderByCreatedAtDesc(
+                            memberId, idempotencyKey, Instant.now().minus(Duration.ofHours(24)))
+                    .map(RecognitionAcceptedResponse::from)
+                    .orElseThrow(() -> new BusinessException(HttpStatus.CONFLICT, "IDEMPOTENCY_KEY_CONFLICT",
+                            "동일한 요청이 이미 처리 중입니다. 잠시 후 다시 시도해 주세요."));
         } catch (RuntimeException exception) { storage.delete(key); throw exception; }
     }
 

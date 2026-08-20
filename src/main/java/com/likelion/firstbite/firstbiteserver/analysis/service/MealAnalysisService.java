@@ -73,6 +73,9 @@ public class MealAnalysisService {
         if (!meal.belongsTo(memberId)) {
             throw new BusinessException(HttpStatus.FORBIDDEN, "MEAL_FORBIDDEN", "다른 사용자의 식사에 접근할 수 없습니다.");
         }
+        if (meal.getItems().isEmpty()) {
+            throw new BusinessException(HttpStatus.BAD_REQUEST, "MEAL_EMPTY", "분석할 메뉴가 없습니다.");
+        }
         UUID recalculationKey = UUID.randomUUID();
         MealAnalysis analysis = calculateAndSave(meal, memberId, recalculationKey,
                 hash(meal.getId() + ":side-menu:" + recalculationKey), true);

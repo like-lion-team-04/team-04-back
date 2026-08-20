@@ -63,7 +63,11 @@ public class AuthService {
             if (detail.contains("phone")) {
                 throw new BusinessException(HttpStatus.CONFLICT, "AUTH_PHONE_NUMBER_DUPLICATED", "이미 가입된 휴대폰 번호입니다.");
             }
-            throw new BusinessException(HttpStatus.CONFLICT, "AUTH_EMAIL_DUPLICATED", "이미 사용 중인 이메일입니다.");
+            if (detail.contains("email")) {
+                throw new BusinessException(HttpStatus.CONFLICT, "AUTH_EMAIL_DUPLICATED", "이미 사용 중인 이메일입니다.");
+            }
+            // 이메일/전화번호 제약이 아닌 예기치 못한 무결성 위반은 이메일 중복으로 오분류하지 않고 그대로 전파(→ 표준 500).
+            throw exception;
         }
         return SignUpResponse.from(member, PhoneNumberNormalizer.mask(phone.normalizedNumber()));
     }

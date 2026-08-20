@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import tools.jackson.databind.exc.MismatchedInputException;
 
 import java.util.List;
@@ -97,6 +98,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMediaType(HttpMediaTypeNotSupportedException exception) {
         return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE)
                 .body(ErrorResponse.of("COMMON_UNSUPPORTED_MEDIA_TYPE", "지원하지 않는 미디어 타입입니다."));
+    }
+
+    // 존재하지 않는 경로/리소스 → 표준 404 (기본 500 fallback으로 새지 않도록)
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NoResourceFoundException exception) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ErrorResponse.of("COMMON_NOT_FOUND", "요청한 리소스를 찾을 수 없습니다."));
     }
 
     // 최종 fallback: 처리되지 않은 모든 예외를 규격화된 500으로. 원인은 서버 로그로만 남긴다(클라이언트 미노출).

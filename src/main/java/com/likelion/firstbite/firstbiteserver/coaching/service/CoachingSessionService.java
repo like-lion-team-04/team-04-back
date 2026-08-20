@@ -130,7 +130,10 @@ public class CoachingSessionService {
         }
 
         Instant receivedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
-        CoachingSession.StageAdvance advance = session.advance(action, request.occurredAt(), receivedAt);
+        // 다음 단계의 제한 시간을 계획에서 가져와 전달(하드코딩 대신 plan 기반).
+        var plan = coachingPlanService.getPlan(memberId, session.getMealId());
+        Integer nextStageSeconds = plan.stages().get(session.getCurrentStage()).recommendedSeconds();
+        CoachingSession.StageAdvance advance = session.advance(action, request.occurredAt(), receivedAt, nextStageSeconds);
         stageRecordRepository.save(CoachingStageRecord.from(sessionId, action, advance));
         sessionRepository.save(session);
         return new UpdateCoachingStageResponse(sessionId, session.getCurrentStage(), session.getStatus(),

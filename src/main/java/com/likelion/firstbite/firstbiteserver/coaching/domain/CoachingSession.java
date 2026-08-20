@@ -56,13 +56,14 @@ public class CoachingSession {
         return session;
     }
 
-    public StageAdvance advance(ProgressAction action, Instant occurredAt, Instant receivedAt) {
+    public StageAdvance advance(ProgressAction action, Instant occurredAt, Instant receivedAt, Integer nextStageSeconds) {
         int previousStage = currentStage;
         long actualSeconds = Math.max(0, Duration.between(stageStartedAt, receivedAt).getSeconds());
         StageResult result = action == ProgressAction.SKIP ? StageResult.SKIPPED : StageResult.COMPLETED;
         currentStage++;
         stageStartedAt = receivedAt;
-        stageEndsAt = currentStage < totalStages ? receivedAt.plusSeconds(300) : null;
+        // 다음 단계의 제한 시간은 계획(plan)에서 전달받는다. 마지막 단계면 null(무제한).
+        stageEndsAt = nextStageSeconds == null ? null : receivedAt.plusSeconds(nextStageSeconds);
         updatedAt = receivedAt;
         return new StageAdvance(previousStage, result, actualSeconds, occurredAt, receivedAt);
     }

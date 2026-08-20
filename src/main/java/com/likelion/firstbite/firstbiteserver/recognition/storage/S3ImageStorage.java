@@ -44,7 +44,10 @@ public class S3ImageStorage implements ImageStorage {
     @Override public void delete(String key) {
         if (bucket.isBlank()) return;
         try { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()); }
-        catch (S3Exception ignored) { }
+        catch (S3Exception exception) {
+            // 보상 삭제 실패는 요청을 실패시키지 않되, 고아 객체 추적을 위해 로그를 남긴다.
+            log.warn("S3 객체 삭제 실패(고아 객체 가능) bucket={}, key={}", bucket, key, exception);
+        }
     }
 
     private void requireConfigured() { if (bucket.isBlank()) throw storageError(); }

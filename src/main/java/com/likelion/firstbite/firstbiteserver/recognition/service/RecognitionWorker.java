@@ -18,7 +18,7 @@ public class RecognitionWorker {
     private final ImageStorage storage;
     private final VisionClient visionClient;
 
-    @Async
+    @Async("recognitionExecutor")
     public void process(UUID recognitionId) {
         try {
             var recognition = repository.findByIdWithImage(recognitionId).orElseThrow();
