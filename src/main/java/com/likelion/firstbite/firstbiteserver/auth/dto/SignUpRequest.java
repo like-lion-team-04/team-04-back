@@ -1,5 +1,6 @@
 package com.likelion.firstbite.firstbiteserver.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -32,6 +33,7 @@ public record SignUpRequest(
         @NotNull(message = "생년월일은 필수입니다.")
         @Past(message = "생년월일은 과거 날짜여야 합니다.")
         @MinAge(14)
+        @JsonFormat(pattern = "[yyyy-MM-dd][yyyyMMdd]")
         LocalDate birthDate,
 
         @AssertTrue(message = "이용약관 동의가 필요합니다.")
