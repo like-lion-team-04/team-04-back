@@ -34,7 +34,11 @@ public class SideMenuListService {
         NutrientFocus focus = parseFocus(nutrientFocus);
         FoodCategory parsedCategory = parseCategory(category);
         String normalizedQuery = query == null || query.isBlank() ? null : query.trim();
-        var result = repository.findForList(normalizedQuery, parsedCategory, focus, activeOnly,
+        boolean hasQuery = normalizedQuery != null;
+        String queryPattern = hasQuery
+                ? "%" + normalizedQuery.toLowerCase(Locale.ROOT) + "%"
+                : "%";
+        var result = repository.findForList(hasQuery, queryPattern, parsedCategory, focus, activeOnly,
                 PageRequest.of(page, size));
         var items = result.stream()
                 .map(SideMenuListResponse.Item::from).toList();

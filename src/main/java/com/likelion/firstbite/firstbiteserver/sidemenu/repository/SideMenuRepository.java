@@ -21,18 +21,21 @@ public interface SideMenuRepository extends JpaRepository<SideMenu, UUID> {
     @EntityGraph(attributePaths = "food")
     Optional<SideMenu> findByIdAndActiveTrue(UUID id);
 
+    // :queryPattern은 서비스에서 소문자·와일드카드까지 완성해 항상 non-null로 전달한다.
+    // (null 바인드 파라미터를 lower/concat에 넣으면 PostgreSQL이 bytea로 추론해 오류가 난다.)
     @Query("""
             select sideMenu from SideMenu sideMenu
             join sideMenu.food food
             where (:nutrientFocus is null or sideMenu.nutrientFocus = :nutrientFocus)
               and (:category is null or food.searchCategory = :category)
-              and (:query is null or lower(food.name) like lower(concat('%', :query, '%'))
-                   or lower(food.initials) like lower(concat('%', :query, '%')))
+              and (:hasQuery = false or lower(food.name) like :queryPattern
+                   or lower(food.initials) like :queryPattern)
               and (:activeOnly = false or sideMenu.active = true)
             order by food.name asc, sideMenu.id asc
             """)
     @EntityGraph(attributePaths = "food")
-    Page<SideMenu> findForList(@Param("query") String query,
+    Page<SideMenu> findForList(@Param("hasQuery") boolean hasQuery,
+                               @Param("queryPattern") String queryPattern,
                                @Param("category") FoodCategory category,
                                @Param("nutrientFocus") NutrientFocus nutrientFocus,
                                @Param("activeOnly") boolean activeOnly, Pageable pageable);
