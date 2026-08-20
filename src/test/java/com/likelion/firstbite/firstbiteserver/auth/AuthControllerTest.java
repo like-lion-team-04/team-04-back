@@ -260,6 +260,19 @@ class AuthControllerTest {
     }
 
     @Test
+    void acceptsBirthDateWithoutHyphens() throws Exception {
+        String token = verifyPhone("010-1234-5678");
+        Map<String, Object> request = validRequest(token, "user@example.com");
+        request.put("birthDate", "19990101");
+
+        mockMvc.perform(post("/api/v1/auth/signup")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.birthDate").value("1999-01-01"));
+    }
+
+    @Test
     void verificationTokenCanBeUsedOnlyOnce() throws Exception {
         String token = verifyPhone("010-1234-5678");
         signUp(validRequest(token, "first@example.com"));
